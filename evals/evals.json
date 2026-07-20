@@ -1,0 +1,254 @@
+{
+  "skill_name": "delegated-execution-protocol",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Using the collaboration tools available in the current Codex session, plan delegated execution for a backend change and a separate documentation update. Make the plan executable against the actual tool schema and be precise about model, reasoning, context, concurrency, lifecycle, and cleanup claims.",
+      "expected_output": "A capability-aware plan that classifies each task, selects a GPT-5.6 custom-agent profile, chooses a transport that can enforce it, and does not invent lifecycle operations.",
+      "files": [],
+      "expectations": [
+        "Inspects the active tool schema before choosing model, reasoning, context, or lifecycle parameters.",
+        "Creates a routing record and selects delegated_worker gpt-5.6-terra/medium for ordinary bounded implementation.",
+        "Uses native named-agent dispatch when supported, explicit Desktop CLI overrides when differentiation matters, or verified inheritance when collaboration controls matter more.",
+        "Uses runtime metadata to distinguish an applied profile from a requested or inherited assignment.",
+        "Keeps within the reported concurrency capacity and reserves final judgment for the main conversation.",
+        "Does not claim completed agents were closed when no close operation exists."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Split this implementation: agent A may edit only api/auth.py, agent B may edit only docs/auth.md, and agent C must update api/routes.py after A's API contract is final. Explain what runs concurrently and what stays sequential.",
+      "expected_output": "A dependency-aware schedule with explicit ownership and no overlapping writes.",
+      "files": [],
+      "expectations": [
+        "Runs A and B concurrently because their write scopes are disjoint and independent.",
+        "Runs C only after A because C depends on A's final contract.",
+        "Includes may-edit and must-not-edit ownership plus validation expectations.",
+        "Keeps integration and final review in the main conversation."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Review a high-impact, high-ambiguity billing migration plan with weak rollback evidence. The active tool supports explicit model and reasoning selection. Decide whether to use a reviewer and define its authority.",
+      "expected_output": "A delegated_planning_auditor using gpt-5.6-sol/xhigh through an enforcing transport, with narrow authority and main-thread final ownership.",
+      "files": [],
+      "expectations": [
+        "Selects delegated_planning_auditor with gpt-5.6-sol/xhigh because both impact and ambiguity are high.",
+        "Makes the planning auditor read-only and asks it to attack failure paths and evidence gaps.",
+        "Does not let the reviewer execute the migration or make the final decision.",
+        "Requires the main conversation to resolve disagreements and verify rollback evidence."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Two agents are running. One is still useful but misunderstood a file boundary; the other is now duplicating work after the user narrowed the request. Describe the lifecycle actions to take before spawning anything else.",
+      "expected_output": "A precise steering and interruption response that avoids duplicate work.",
+      "files": [],
+      "expectations": [
+        "Sends a clarification to the still-useful running agent instead of restarting it.",
+        "Interrupts the obsolete duplicate agent.",
+        "Checks status before spawning any replacement.",
+        "Reports actual lifecycle actions without inventing a close operation."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Rename one local variable in a single file and run its existing unit test. There are no independent subtasks. Decide whether delegation is useful.",
+      "expected_output": "A main-thread execution decision with no unnecessary subagent.",
+      "files": [],
+      "expectations": [
+        "Keeps the task in the main conversation because delegation adds no parallel value.",
+        "Does not spawn an agent merely to satisfy a ritual.",
+        "Still requires the existing unit test and final verification."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Delegate four independent tasks: a three-file read-only scan, an ordinary bounded implementation, a high-risk cross-module implementation, and a cross-module correctness review. Select actual agent profiles and explain how their model and reasoning settings will be enforced on a runtime whose spawn_agent tool has no role/model/effort fields.",
+      "expected_output": "A differentiated route using explorer terra/low, worker terra/medium, senior worker sol/high, and reviewer sol/high, with explicit CLI dispatch or another proven enforcing transport.",
+      "files": [],
+      "expectations": [
+        "Routes the scan to delegated_explorer with gpt-5.6-terra/low.",
+        "Routes ordinary implementation to delegated_worker with gpt-5.6-terra/medium.",
+        "Routes high-risk implementation to delegated_senior_worker with gpt-5.6-sol/high rather than a read-only reviewer.",
+        "Routes correctness review to delegated_reviewer with gpt-5.6-sol/high.",
+        "Does not pretend task_name applies a custom agent and uses an enforcing transport with runtime evidence."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "A request says: review a medium-risk module and then fix the findings in the same delegated task. Route it safely and explain the dependency.",
+      "expected_output": "A forced split into a read-only delegated_reviewer followed sequentially by a bounded delegated_worker after the review findings are accepted.",
+      "files": [],
+      "expectations": [
+        "Does not assign a write request to the read-only reviewer.",
+        "Returns a non-dispatchable top-level composite with delegate=false and dispatchable=false.",
+        "Marks both delegated steps delegate=true and the write step requires_main_acceptance=true.",
+        "Splits review and implementation into two tasks with separate profiles and permissions.",
+        "Runs the worker only after the main conversation accepts the review findings and defines ownership.",
+        "Keeps final integration and verification in the main conversation."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Process 500 independent JSON metadata files, extracting three explicit fields into a fixed schema. The work is read-only, low-risk, low-ambiguity, batch-oriented, and cost/latency sensitive. Choose the agent profile, model, effort, and enforcement path.",
+      "expected_output": "An economy route using delegated_batch_explorer with gpt-5.6-luna/low through a transport that proves the actual assignment.",
+      "files": [],
+      "expectations": [
+        "Selects delegated_batch_explorer with gpt-5.6-luna/low.",
+        "Keeps the task read-only and requires structured failed-item reporting.",
+        "Uses explicit CLI assignment on the current Desktop wrapper and verifies rollout metadata.",
+        "Escalates instead of improvising if ambiguity or judgment appears."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Apply the same deterministic text replacement to 80 independent documentation files. Each file has explicit ownership, the task is low-risk and low-ambiguity, and a strong exact-output validator exists. Optimize for economy.",
+      "expected_output": "An economy route using delegated_batch_worker with gpt-5.6-luna/medium, bounded writes, and strong post-batch validation.",
+      "files": [],
+      "expectations": [
+        "Selects delegated_batch_worker with gpt-5.6-luna/medium.",
+        "Requires bounded non-cross-module writes and strong deterministic verification.",
+        "Stops and escalates if the batch reveals ambiguity, coupling, or scope expansion.",
+        "Main conversation reviews the complete diff and validation result."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "The user requests economy mode for a one-off medium-ambiguity change without strong tests. Explain the route, and also state the recommended main-conversation model and effort for the delegated workflow.",
+      "expected_output": "A recorded fallback from economy to balanced Terra/Sol routing, while the main conversation remains gpt-5.6-sol/high.",
+      "files": [],
+      "expectations": [
+        "Rejects Luna because the work is not a low-ambiguity verified batch.",
+        "Records why economy fell back to balanced routing.",
+        "Does not compensate by using Luna high or xhigh.",
+        "Keeps the main conversation on gpt-5.6-sol/high."
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "A high-impact, high-ambiguity correctness review also asks to fix accepted findings. Route the review and write phases without confusing a reviewer with a planning auditor.",
+      "expected_output": "A split using delegated_reviewer Sol/high for correctness review, followed by delegated_senior_worker Sol/high after main-thread acceptance; no xhigh planning auditor.",
+      "files": [],
+      "expectations": [
+        "Keeps ordinary correctness review on delegated_reviewer/high even when impact and ambiguity are high.",
+        "Uses delegated_planning_auditor/xhigh only for planning-audit or arbitration kinds.",
+        "Splits read-only judgment from writes and preserves main-thread acceptance between phases.",
+        "Does not let the reviewer or auditor edit files."
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Route an economy Luna batch when the model catalog is missing, and when Luna is absent but matching Terra effort is available. Define fail-closed behavior and profile identity.",
+      "expected_output": "Missing catalog fails closed; missing Luna may fall back only to the matching Terra profile at the same effort with an explicit warning.",
+      "files": [],
+      "expectations": [
+        "Fails closed when the active model catalog is unavailable.",
+        "Allows Luna to fall back only to matching Terra low or medium when supported.",
+        "Renames the logical profile to the corresponding Terra profile after fallback.",
+        "Rejects the assignment when matching Terra effort is unavailable instead of returning a mismatched Sol/profile combination."
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Three cross-module read-only reviews were successfully created with spawn_agent. The current collaboration transport inherits gpt-5.6-sol/high and cannot override each child to Terra or Luna. Report the dispatch to a Chinese user without making it sound like delegation failed.",
+      "expected_output": "A positive dispatch report that says all three tasks were assigned, states their scopes/status, and records inherited gpt-5.6-sol/high as the actual runtime profile without saying assignment was impossible.",
+      "files": [],
+      "expectations": [
+        "Leads by saying the three collaboration tasks were successfully assigned and describes their scopes or execution status.",
+        "States gpt-5.6-sol/high as the actual inherited runtime profile.",
+        "Separates unavailable per-child model override from successful task assignment.",
+        "Does not say or imply that tasks, subagents, or custom agents could not be assigned.",
+        "Mentions the transport limitation at most once and only as execution-profile context."
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Delegate three independent read-only tasks: a small low-risk targeted file scan, a cross-module medium-ambiguity product-boundary investigation, and a correctness-focused runtime visual review that uses a browser and might encounter a hung browser process. The user expects intelligent model and reasoning assignment. The current spawn_agent wrapper inherits Sol/high and native role binding has failed its probe.",
+      "expected_output": "The small targeted scan stays in the Sol/high main conversation; the substantial product investigation uses Terra/medium and the correctness review uses Sol/high, with no more than two workers.",
+      "files": [],
+      "expectations": [
+        "Applies the delegation value gate before model selection for all three tasks.",
+        "Keeps the small targeted scan in the main conversation because useful parallelism alone does not amortize a worker cold start.",
+        "Routes the product-boundary investigation to delegated_researcher Terra/medium.",
+        "Routes the correctness review to delegated_reviewer Sol/high.",
+        "Uses no more than two workers and an enforced explicit transport for both justified isolated tasks.",
+        "Does not treat parallel execution, progress visibility, or a possibly hung browser process as a steering trigger.",
+        "Does not silently replace all selected profiles with inherited Sol/high collaboration children."
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Investigate a high-ambiguity product-boundary question across several modules. The work is read-only, low-risk, isolated, and has strong source-level verification. It is research, not a correctness or security review. Route it without overusing Sol.",
+      "expected_output": "A delegated_deep_researcher route using gpt-5.6-terra/high through the enforced isolated transport.",
+      "files": [],
+      "expectations": [
+        "Selects delegated_deep_researcher with gpt-5.6-terra/high.",
+        "Requires read-only execution and evidence with paths, line references, confidence, and unresolved gaps.",
+        "Uses explicit CLI or another proven model-capable isolated transport.",
+        "Escalates to Sol/high if risk becomes high, verification becomes weak, or the task turns into correctness review."
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "Implement a high-ambiguity but bounded change in one module. Risk is medium, may-edit ownership is explicit, no public contract changes, and strong targeted tests exist. Route it while preserving a strict escalation boundary.",
+      "expected_output": "A delegated_complex_worker route using gpt-5.6-terra/high, bounded workspace-write ownership, and strong verification.",
+      "files": [],
+      "expectations": [
+        "Selects delegated_complex_worker with gpt-5.6-terra/high.",
+        "Requires bounded non-cross-module ownership and strong verification.",
+        "Stops and escalates if risk, scope, rollback uncertainty, or contract impact expands.",
+        "Keeps high-risk, weakly verified, broad, cross-module, or quality-priority execution on Sol/high."
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "A low-risk single-file scan is small, read-only, and could technically run in parallel, but independent evidence is not required. Route it while preserving result quality and minimizing token use.",
+      "expected_output": "Stage 0 rejects delegation and keeps the scan in the Sol/high main conversation with the same evidence requirements.",
+      "files": [],
+      "expectations": [
+        "Rejects delegation because useful parallel value alone does not justify worker cold-start cost.",
+        "Keeps the task in the main conversation instead of downgrading its verification standard.",
+        "Still reports paths, evidence, and any unverified conclusion.",
+        "Does not start a worker merely to demonstrate model routing."
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "Six homogeneous read-only checks form a batch and share the same repository, permissions, model profile, evidence sources, and validator. They qualify for delegation, the initial plan requests six workers, and no sharding evidence exists.",
+      "expected_output": "Bundle all checks into the default single batch worker because no measured-throughput or critical-path sharding evidence exists.",
+      "files": [],
+      "expectations": [
+        "Returns or honors max_workers=1 for the batch default.",
+        "Records sharding_evidence=none and sharding_justified=false.",
+        "Treats requested_workers greater than one as bundle_required.",
+        "Bundles checks with the same profile, permissions, evidence sources, and validation path.",
+        "Preserves per-item evidence and failure reporting inside the bundled result."
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "A 500-item homogeneous batch has measured evidence that one worker misses the required throughput while two workers meet it. Request three workers and route the batch.",
+      "expected_output": "Measured-throughput evidence permits at most two workers; the third request is bundled instead of dispatched.",
+      "files": [],
+      "expectations": [
+        "Records sharding_evidence=measured-throughput and sharding_justified=true.",
+        "Returns max_workers=2 and never permits more than two.",
+        "Marks requested_workers=3 as bundle_required.",
+        "Preserves the default one-worker batch route when evidence is none."
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "Route four otherwise identical isolated tasks using transport preferences auto, native-verified, user-owned-desktop-task, and explicit-cli, then explain what changes for steerable coordination.",
+      "expected_output": "Each isolated preference maps to its enforcing transport; steerable rejects isolated preferences and only uses verified inherited collaboration.",
+      "files": [],
+      "expectations": [
+        "Maps auto to the currently verified generic fallback and does not invent native capability.",
+        "Uses native named-agent only for native-verified and a Desktop task only for an explicit user-owned Desktop request.",
+        "Maps explicit-cli to explicit-codex-cli.",
+        "Allows steerable only with transport_preference=auto and verified-inherited-collaboration."
+      ]
+    }
+  ]
+}
