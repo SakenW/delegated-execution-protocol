@@ -161,11 +161,6 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
         for index, (agent_name, model, effort) in enumerate((review_profile, worker_profile)):
             logical_agent_name = agent_name
             recommended_transport = isolated_transport_for(args.transport_preference)
-            if args.coordination == "steerable":
-                agent_name = "inherited_collaboration_child"
-                model = "gpt-5.6-sol"
-                effort = "high"
-                recommended_transport = "verified-inherited-collaboration"
             resolved_model, resolved_effort, substitution = resolve_catalog(
                 args.catalog, model, effort
             )
@@ -183,10 +178,6 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
                     "transport_preference": args.transport_preference,
                 }
             )
-        if args.coordination == "steerable":
-            routing_warnings.append(
-                "steerable coordination uses the current inherited collaboration profile: gpt-5.6-sol/high"
-            )
         return {
             "delegate": False,
             "dispatchable": False,
@@ -197,32 +188,11 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
             "requested_priority": requested_priority,
             "effective_priority": (
                 "quality"
-                if requested_priority == "quality" or args.coordination == "steerable"
+                if requested_priority == "quality"
                 else "balanced"
             ),
             "routing_warnings": routing_warnings,
             "recommended_transport": "sequential-per-step",
-            "transport_enforced": True,
-            "transport_preference": args.transport_preference,
-            "cost_gate": "justified",
-            **worker_budget,
-        }
-
-    if args.coordination == "steerable":
-        routing_warnings.append(
-            "coordination requires the current inherited collaboration profile: gpt-5.6-sol/high"
-        )
-        return {
-            "delegate": True,
-            "agent_name": "inherited_collaboration_child",
-            "model": "gpt-5.6-sol",
-            "model_reasoning_effort": "high",
-            "reason": "live steering requires collaboration-tree lifecycle controls",
-            "catalog_substitution": None,
-            "requested_priority": requested_priority,
-            "effective_priority": "quality",
-            "routing_warnings": routing_warnings,
-            "recommended_transport": "verified-inherited-collaboration",
             "transport_enforced": True,
             "transport_preference": args.transport_preference,
             "cost_gate": "justified",
@@ -327,8 +297,6 @@ def delegation_value_gate(args: argparse.Namespace) -> dict[str, str | bool]:
     """Reject worker cold starts unless they buy evidence, isolation, or real throughput."""
     if args.independent_evidence == "required":
         return {"justified": True, "reason": "independent evidence is required"}
-    if args.risk in {"high", "critical"}:
-        return {"justified": True, "reason": "risk requires independent execution evidence"}
     if args.coordination == "steerable":
         return {"justified": True, "reason": "live steering requires a worker session"}
     if args.workload == "batch" and args.batch_size >= 10:
@@ -363,7 +331,7 @@ def worker_budget_for(args: argparse.Namespace) -> dict[str, int | bool | str]:
 
 def isolated_transport_for(preference: str) -> str:
     transports = {
-        "auto": "explicit-codex-cli",
+        "auto": "native-named-agent",
         "native-verified": "native-named-agent",
         "user-owned-desktop-task": "user-owned-desktop-task",
         "explicit-cli": "explicit-codex-cli",
@@ -379,6 +347,7 @@ def can_use_luna_read(args: argparse.Namespace) -> bool:
         and args.writes == "none"
         and args.risk == "low"
         and args.ambiguity == "low"
+        and args.verification in {"normal", "strong"}
         and args.kind not in {"review", "planning-audit", "arbitration"}
     )
 
@@ -407,6 +376,8 @@ def luna_rejection_reason(args: argparse.Namespace) -> str:
         failed.append("risk is not low")
     if args.ambiguity != "low":
         failed.append("ambiguity is not low")
+    if args.writes == "none" and args.verification == "weak":
+        failed.append("read verification is weak")
     if args.kind in {"review", "planning-audit", "arbitration"}:
         failed.append("task requires judgment")
     if args.writes == "broad" or (args.writes != "none" and args.scope == "cross-module"):

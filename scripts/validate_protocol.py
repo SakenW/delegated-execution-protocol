@@ -15,6 +15,7 @@ from pathlib import Path
 
 DEFAULT_SKILL_ROOT = Path(__file__).resolve().parent.parent
 SKILL_NAME = "delegated-execution-protocol"
+VERIFIED_AT = "2026-07-26"
 EXPECTED_PROFILES = {
     "delegated_batch_explorer": ("gpt-5.6-luna", "low", "read-only"),
     "delegated_explorer": ("gpt-5.6-terra", "low", "read-only"),
@@ -89,11 +90,6 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--skill-root", type=Path, default=DEFAULT_SKILL_ROOT)
     parser.add_argument("--codex-home", type=Path, default=Path.home() / ".codex")
-    parser.add_argument(
-        "--check-local-profiles",
-        action="store_true",
-        help="also verify a local Codex profile installation under --codex-home",
-    )
     return parser.parse_args()
 
 
@@ -180,7 +176,9 @@ def validate_openai_metadata(skill_root: Path) -> None:
 def validate_runtime_references(skill_root: Path) -> None:
     runtime = (skill_root / "references" / "runtime-transports.md").read_text(encoding="utf-8")
     reporting = (skill_root / "references" / "reporting.md").read_text(encoding="utf-8")
-    for token in ("fork_turns", "turn_context", "explicit-codex-cli", "verified-inherited-collaboration", "探测"):
+    require(re.search(rf"^verified_at:\s*{re.escape(VERIFIED_AT)}\s*$", runtime, re.MULTILINE) is not None, "runtime verified_at drifted")
+    require(re.search(r"^verification_surface:\s*.+$", runtime, re.MULTILINE) is not None, "runtime verification surface is missing")
+    for token in ("fork_turns", "turn_context", "agent_type", "reasoning_effort", "explicit-codex-cli", "native-named-agent"):
         require(token in runtime or token in (skill_root / "SKILL.md").read_text(encoding="utf-8"), f"runtime contract lacks {token}")
     require(reporting.count("```text") >= 3, "reporting reference lacks route examples")
     for token in ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"):
@@ -282,11 +280,13 @@ def main() -> None:
     validate_openai_metadata(skill_root)
     validate_runtime_references(skill_root)
     validate_selector_behavior(skill_root, cache_before)
-    if args.check_local_profiles:
-        validate_profile_safety(codex_home)
+    validate_profile_safety(codex_home)
     eval_count = validate_evals(skill_root)
     require(not cache_snapshot(skill_root), "protocol validation generated Python cache")
-    print(f"protocol validation passed: {eval_count} eval cases; cache absent")
+    print(
+        f"protocol validation passed: {eval_count} eval definitions validated; "
+        "selector tests passed; cache absent"
+    )
 
 
 if __name__ == "__main__":

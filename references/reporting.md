@@ -8,10 +8,10 @@
 
 ## 中文措辞
 
-继承式协作：
+原生 steerable 协作：
 
 ```text
-已成功指派 2 个协作任务，分别负责 A、B；当前协作通道的实际配置均为 gpt-5.6-sol / high，本轮使用它是因为需要动态纠偏。
+已成功指派 2 个协作任务，分别负责 A、B；A 请求 gpt-5.6-terra / medium，B 请求 gpt-5.6-sol / high，本轮保留 follow-up/interrupt 是因为需要动态纠偏。实际配置以运行时元数据为准。
 ```
 
 差异化 isolated worker：

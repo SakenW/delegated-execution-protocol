@@ -97,7 +97,7 @@
       "expectations": [
         "Selects delegated_batch_explorer with gpt-5.6-luna/low.",
         "Keeps the task read-only and requires structured failed-item reporting.",
-        "Uses explicit CLI assignment on the current Desktop wrapper and verifies rollout metadata.",
+        "Uses the current native model-capable transport and verifies rollout metadata.",
         "Escalates instead of improvising if ambiguity or judgment appears."
       ]
     },
@@ -151,20 +151,20 @@
     },
     {
       "id": 13,
-      "prompt": "Three cross-module read-only reviews were successfully created with spawn_agent. The current collaboration transport inherits gpt-5.6-sol/high and cannot override each child to Terra or Luna. Report the dispatch to a Chinese user without making it sound like delegation failed.",
-      "expected_output": "A positive dispatch report that says all three tasks were assigned, states their scopes/status, and records inherited gpt-5.6-sol/high as the actual runtime profile without saying assignment was impossible.",
+      "prompt": "Three cross-module read-only reviews were successfully created with spawn_agent using explicit profile/model/effort overrides. Report the dispatch to a Chinese user while distinguishing accepted assignment settings from verified runtime settings.",
+      "expected_output": "A positive dispatch report that says all three tasks were assigned, states their scopes/status, records requested profile settings as assignment evidence, and claims actual runtime settings only after metadata verification.",
       "files": [],
       "expectations": [
         "Leads by saying the three collaboration tasks were successfully assigned and describes their scopes or execution status.",
-        "States gpt-5.6-sol/high as the actual inherited runtime profile.",
-        "Separates unavailable per-child model override from successful task assignment.",
+        "Separates accepted per-child overrides from verified actual runtime settings.",
+        "Does not infer model or effort from the task label alone.",
         "Does not say or imply that tasks, subagents, or custom agents could not be assigned.",
         "Mentions the transport limitation at most once and only as execution-profile context."
       ]
     },
     {
       "id": 14,
-      "prompt": "Delegate three independent read-only tasks: a small low-risk targeted file scan, a cross-module medium-ambiguity product-boundary investigation, and a correctness-focused runtime visual review that uses a browser and might encounter a hung browser process. The user expects intelligent model and reasoning assignment. The current spawn_agent wrapper inherits Sol/high and native role binding has failed its probe.",
+      "prompt": "Delegate three independent read-only tasks: a small low-risk targeted file scan, a cross-module medium-ambiguity product-boundary investigation, and a correctness-focused runtime visual review that uses a browser and might encounter a hung browser process. The user expects intelligent model and reasoning assignment. The current spawn_agent wrapper supports explicit profile/model/effort overrides.",
       "expected_output": "The small targeted scan stays in the Sol/high main conversation; the substantial product investigation uses Terra/medium and the correctness review uses Sol/high, with no more than two workers.",
       "files": [],
       "expectations": [
@@ -172,9 +172,9 @@
         "Keeps the small targeted scan in the main conversation because useful parallelism alone does not amortize a worker cold start.",
         "Routes the product-boundary investigation to delegated_researcher Terra/medium.",
         "Routes the correctness review to delegated_reviewer Sol/high.",
-        "Uses no more than two workers and an enforced explicit transport for both justified isolated tasks.",
+        "Uses no more than two workers and the verified native model-capable transport for both justified isolated tasks.",
         "Does not treat parallel execution, progress visibility, or a possibly hung browser process as a steering trigger.",
-        "Does not silently replace all selected profiles with inherited Sol/high collaboration children."
+        "Does not silently replace the selected profiles with inherited defaults."
       ]
     },
     {
@@ -241,13 +241,36 @@
     {
       "id": 20,
       "prompt": "Route four otherwise identical isolated tasks using transport preferences auto, native-verified, user-owned-desktop-task, and explicit-cli, then explain what changes for steerable coordination.",
-      "expected_output": "Each isolated preference maps to its enforcing transport; steerable rejects isolated preferences and only uses verified inherited collaboration.",
+      "expected_output": "Each isolated preference maps to its enforcing transport; auto uses the currently verified native transport, while steerable rejects isolated preferences and keeps the selected native profile with a concrete steering trigger.",
       "files": [],
       "expectations": [
-        "Maps auto to the currently verified generic fallback and does not invent native capability.",
+        "Maps auto to native named-agent because the current tool schema supports explicit profile/model/effort overrides.",
         "Uses native named-agent only for native-verified and a Desktop task only for an explicit user-owned Desktop request.",
         "Maps explicit-cli to explicit-codex-cli.",
-        "Allows steerable only with transport_preference=auto and verified-inherited-collaboration."
+        "Allows steerable only with transport_preference=auto, a concrete trigger, and native named-agent lifecycle controls."
+      ]
+    },
+    {
+      "id": 21,
+      "prompt": "A high-risk one-file fix is small, sequential, and has no useful execution parallelism. After the focused test passes, decide separately whether to delegate execution and whether to request an independent adversarial review.",
+      "expected_output": "Keep implementation in the main conversation because risk alone does not justify execution delegation, then create a separate read-only reviewer candidate with independent evidence required.",
+      "files": [],
+      "expectations": [
+        "Does not treat high risk as sufficient reason to delegate the implementation.",
+        "Runs the implementation and focused validation in the main conversation.",
+        "Classifies the post-implementation adversarial review separately with independent_evidence=required.",
+        "Keeps the reviewer read-only and the final decision in the main conversation."
+      ]
+    },
+    {
+      "id": 22,
+      "prompt": "A short delegated task completes without blocking, safety changes, user decisions, or useful routing details. Decide what commentary to send and how to report the result.",
+      "expected_output": "Send no standalone optional commentary; include the completed result and any relevant verification in the final response.",
+      "files": [],
+      "expectations": [
+        "Does not send commentary merely to announce routine dispatch or completion.",
+        "Preserves mandatory updates for blocking, safety, external effects, or genuinely long-running work.",
+        "Reports the verified task result concisely in the final response."
       ]
     }
   ]

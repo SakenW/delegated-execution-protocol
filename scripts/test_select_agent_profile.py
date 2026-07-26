@@ -152,6 +152,23 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(result["agent_name"], "delegated_reviewer")
         self.assertEqual(result["cost_gate"], "justified")
 
+    def test_high_risk_small_execution_is_not_delegated_for_risk_alone(self) -> None:
+        result = load_selector().select(
+            args(
+                self.catalog,
+                kind="implementation",
+                writes="bounded",
+                scope="small",
+                risk="high",
+                ambiguity="low",
+                parallel_value="none",
+                task_size="small",
+                independent_evidence="none",
+            )
+        )
+        self.assertFalse(result["delegate"])
+        self.assertEqual(result["cost_gate"], "rejected")
+
     def test_small_batch_below_amortization_threshold_stays_in_main(self) -> None:
         result = load_selector().select(
             args(
@@ -374,6 +391,26 @@ class SelectorTests(unittest.TestCase):
         self.assertNotEqual(result["model"], "gpt-5.6-luna")
         self.assertEqual(result["effective_priority"], "balanced")
 
+    def test_economy_batch_read_with_weak_verification_uses_sol_reviewer(self) -> None:
+        result = load_selector().select(
+            args(
+                self.catalog,
+                kind="scan",
+                writes="none",
+                scope="cross-module",
+                risk="low",
+                ambiguity="low",
+                priority="economy",
+                workload="batch",
+                batch_size=20,
+                verification="weak",
+            )
+        )
+        self.assertEqual(result["agent_name"], "delegated_reviewer")
+        self.assertEqual(result["model"], "gpt-5.6-sol")
+        self.assertEqual(result["model_reasoning_effort"], "high")
+        self.assertTrue(any("read verification is weak" in item for item in result["routing_warnings"]))
+
     def test_economy_batch_requiring_steering_does_not_use_luna(self) -> None:
         result = load_selector().select(
             args(
@@ -390,12 +427,12 @@ class SelectorTests(unittest.TestCase):
                 steering_trigger="partial-results",
             )
         )
-        self.assertEqual(result["agent_name"], "inherited_collaboration_child")
-        self.assertEqual(result["model"], "gpt-5.6-sol")
-        self.assertEqual(result["model_reasoning_effort"], "high")
-        self.assertEqual(result["recommended_transport"], "verified-inherited-collaboration")
-        self.assertEqual(result["effective_priority"], "quality")
-        self.assertTrue(any("coordination" in item for item in result["routing_warnings"]))
+        self.assertEqual(result["agent_name"], "delegated_explorer")
+        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model_reasoning_effort"], "low")
+        self.assertEqual(result["recommended_transport"], "native-named-agent")
+        self.assertEqual(result["effective_priority"], "balanced")
+        self.assertTrue(result["routing_warnings"])
         self.assertTrue(result["transport_enforced"])
 
     def test_steerable_coordination_requires_a_specific_trigger(self) -> None:
@@ -424,7 +461,7 @@ class SelectorTests(unittest.TestCase):
                 )
             )
 
-    def test_isolated_route_enforces_explicit_model_transport(self) -> None:
+    def test_isolated_route_uses_current_verified_native_transport(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -436,12 +473,12 @@ class SelectorTests(unittest.TestCase):
                 coordination="isolated",
             )
         )
-        self.assertEqual(result["recommended_transport"], "explicit-codex-cli")
+        self.assertEqual(result["recommended_transport"], "native-named-agent")
         self.assertTrue(result["transport_enforced"])
 
     def test_isolated_transport_preferences_are_mapped_explicitly(self) -> None:
         expected = {
-            "auto": "explicit-codex-cli",
+            "auto": "native-named-agent",
             "native-verified": "native-named-agent",
             "user-owned-desktop-task": "user-owned-desktop-task",
             "explicit-cli": "explicit-codex-cli",
@@ -842,6 +879,7 @@ class SelectorTests(unittest.TestCase):
                     and writes == "none"
                     and risk == "low"
                     and ambiguity == "low"
+                    and verification in {"normal", "strong"}
                     and kind not in {"review", "planning-audit", "arbitration"}
                 )
                 luna_write = (
@@ -859,9 +897,8 @@ class SelectorTests(unittest.TestCase):
                     violations.append(f"unsafe Luna: {label}")
 
             if coordination == "steerable" and (
-                agent != "inherited_collaboration_child"
-                or model != "gpt-5.6-sol"
-                or effort != "high"
+                result["recommended_transport"] != "native-named-agent"
+                or result["transport_preference"] != "auto"
             ):
                 violations.append(f"steerable transport mismatch: {label}")
             if priority == "quality" and coordination == "isolated" and model != "gpt-5.6-sol":
