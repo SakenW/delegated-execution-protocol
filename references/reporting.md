@@ -8,10 +8,10 @@
 
 ## 中文措辞
 
-继承式协作：
+原生 steerable 协作：
 
 ```text
-已成功指派 2 个协作任务，分别负责 A、B；当前协作通道的实际配置均为 gpt-5.6-sol / high，本轮使用它是因为需要动态纠偏。
+已成功指派 2 个协作任务，分别负责 A、B；A 请求 gpt-5.6-terra / medium，B 请求 gpt-5.6-sol / high，本轮保留 follow-up/interrupt 是因为需要动态纠偏。实际配置以运行时元数据为准。
 ```
 
 差异化 isolated worker：
@@ -35,6 +35,10 @@ Ownership: <may edit / must not edit>
 Profile: <agent, model/effort, transport, required evidence>
 Constraints: <context mode, commands, safety boundary>
 Output: <changed files, validation, evidence, residual risk>
+Outcome: <accepted | escalate-one-tier | main-reclaim>
+Prior profile: <none or previous profile>
+Escalation trigger: <objective failure, evidence gap, risk/scope/contract change, or none>
+Observed verification: <command/result or explicit unverified gap>
 ```
 
 不要粘贴完整规则文件、Skill 正文、Brain 页面或主对话推理。

@@ -14,6 +14,7 @@ The protocol is written primarily in Chinese; the scripts and structured output 
 - Cap one-off and batch concurrency at two workers; batches default to one unless throughput evidence justifies sharding.
 - Treat declared model labels as untrusted until the runtime proves the actual model, reasoning effort, and transport.
 - Fail closed if a requested model/effort is unavailable.
+- Use Terra/high for bounded low- or medium-risk review, reserving Sol/high for high-impact or contract-sensitive review.
 
 ## Repository layout
 
@@ -39,8 +40,8 @@ python3 scripts/select_agent_profile.py \
   --kind implementation --writes bounded --scope medium \
   --task-size medium --risk low --ambiguity low \
   --independent-evidence none --parallel-value useful \
-  --priority balanced --workload one-off --batch-size 1 \
-  --verification strong --coordination isolated \
+  --priority economy --workload one-off --batch-size 1 \
+  --verification strong --sensitivity none --coordination isolated \
   --steering-trigger none --requested-workers 1 \
   --sharding-evidence none --transport-preference auto
 ```

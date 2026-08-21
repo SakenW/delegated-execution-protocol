@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import ModuleType
+from unittest.mock import patch
 
 
 SCRIPT_PATH = Path(__file__).with_name("select_agent_profile.py")
@@ -38,9 +39,10 @@ def args(catalog: Path, **overrides: str) -> argparse.Namespace:
         "batch_size": 1,
         "requested_workers": 1,
         "sharding_evidence": "none",
-        "priority": "balanced",
+        "priority": "economy",
         "workload": "one-off",
         "verification": "normal",
+        "sensitivity": "none",
         "coordination": "isolated",
         "transport_preference": "auto",
         "steering_trigger": "none",
@@ -102,6 +104,38 @@ class SelectorTests(unittest.TestCase):
         )
         self.assertFalse(result["delegate"])
 
+    def test_cli_defaults_to_economy_priority(self) -> None:
+        with patch(
+            "sys.argv",
+            [
+                str(SCRIPT_PATH),
+                "--kind", "scan",
+                "--writes", "none",
+                "--scope", "medium",
+                "--risk", "low",
+                "--ambiguity", "low",
+                "--parallel-value", "useful",
+                "--task-size", "medium",
+                "--independent-evidence", "none",
+                "--sensitivity", "none",
+            ],
+        ):
+            parsed = load_selector().parse_args()
+        self.assertEqual(parsed.priority, "economy")
+
+    def test_cli_requires_sensitivity(self) -> None:
+        with patch(
+            "sys.argv",
+            [
+                str(SCRIPT_PATH),
+                "--kind", "scan", "--writes", "none", "--scope", "medium",
+                "--risk", "low", "--ambiguity", "low", "--parallel-value", "useful",
+                "--task-size", "medium", "--independent-evidence", "none",
+            ],
+        ):
+            with self.assertRaises(SystemExit):
+                load_selector().parse_args()
+
     def test_keeps_small_no_parallel_value_work_in_main_even_when_ambiguous(self) -> None:
         result = load_selector().select(
             args(
@@ -134,7 +168,7 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(result["cost_gate"], "rejected")
         self.assertEqual(result["max_workers"], 0)
 
-    def test_required_independent_evidence_preserves_small_review_delegation(self) -> None:
+    def test_required_independent_evidence_uses_standard_reviewer_for_bounded_review(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -149,8 +183,27 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertTrue(result["delegate"])
-        self.assertEqual(result["agent_name"], "delegated_reviewer")
+        self.assertEqual(result["agent_name"], "delegated_standard_reviewer")
+        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model_reasoning_effort"], "high")
         self.assertEqual(result["cost_gate"], "justified")
+
+    def test_high_risk_small_execution_is_not_delegated_for_risk_alone(self) -> None:
+        result = load_selector().select(
+            args(
+                self.catalog,
+                kind="implementation",
+                writes="bounded",
+                scope="small",
+                risk="high",
+                ambiguity="low",
+                parallel_value="none",
+                task_size="small",
+                independent_evidence="none",
+            )
+        )
+        self.assertFalse(result["delegate"])
+        self.assertEqual(result["cost_gate"], "rejected")
 
     def test_small_batch_below_amortization_threshold_stays_in_main(self) -> None:
         result = load_selector().select(
@@ -374,6 +427,27 @@ class SelectorTests(unittest.TestCase):
         self.assertNotEqual(result["model"], "gpt-5.6-luna")
         self.assertEqual(result["effective_priority"], "balanced")
 
+    def test_economy_batch_read_with_weak_verification_reports_gaps_on_terra(self) -> None:
+        result = load_selector().select(
+            args(
+                self.catalog,
+                kind="scan",
+                writes="none",
+                scope="cross-module",
+                risk="low",
+                ambiguity="low",
+                priority="economy",
+                workload="batch",
+                batch_size=20,
+                verification="weak",
+            )
+        )
+        self.assertEqual(result["agent_name"], "delegated_researcher")
+        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model_reasoning_effort"], "medium")
+        self.assertTrue(any("read verification is weak" in item for item in result["routing_warnings"]))
+        self.assertTrue(any("report evidence gaps" in item for item in result["routing_warnings"]))
+
     def test_economy_batch_requiring_steering_does_not_use_luna(self) -> None:
         result = load_selector().select(
             args(
@@ -390,12 +464,12 @@ class SelectorTests(unittest.TestCase):
                 steering_trigger="partial-results",
             )
         )
-        self.assertEqual(result["agent_name"], "inherited_collaboration_child")
-        self.assertEqual(result["model"], "gpt-5.6-sol")
-        self.assertEqual(result["model_reasoning_effort"], "high")
-        self.assertEqual(result["recommended_transport"], "verified-inherited-collaboration")
-        self.assertEqual(result["effective_priority"], "quality")
-        self.assertTrue(any("coordination" in item for item in result["routing_warnings"]))
+        self.assertEqual(result["agent_name"], "delegated_explorer")
+        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model_reasoning_effort"], "low")
+        self.assertEqual(result["recommended_transport"], "native-named-agent")
+        self.assertEqual(result["effective_priority"], "balanced")
+        self.assertTrue(result["routing_warnings"])
         self.assertTrue(result["transport_enforced"])
 
     def test_steerable_coordination_requires_a_specific_trigger(self) -> None:
@@ -414,7 +488,7 @@ class SelectorTests(unittest.TestCase):
             )
 
     def test_steerable_coordination_rejects_isolated_transport_preference(self) -> None:
-        with self.assertRaisesRegex(SystemExit, "only supports inherited collaboration"):
+        with self.assertRaisesRegex(SystemExit, "requires auto transport"):
             load_selector().select(
                 args(
                     self.catalog,
@@ -424,7 +498,7 @@ class SelectorTests(unittest.TestCase):
                 )
             )
 
-    def test_isolated_route_enforces_explicit_model_transport(self) -> None:
+    def test_isolated_route_uses_current_verified_native_transport(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -436,12 +510,12 @@ class SelectorTests(unittest.TestCase):
                 coordination="isolated",
             )
         )
-        self.assertEqual(result["recommended_transport"], "explicit-codex-cli")
+        self.assertEqual(result["recommended_transport"], "native-named-agent")
         self.assertTrue(result["transport_enforced"])
 
     def test_isolated_transport_preferences_are_mapped_explicitly(self) -> None:
         expected = {
-            "auto": "explicit-codex-cli",
+            "auto": "native-named-agent",
             "native-verified": "native-named-agent",
             "user-owned-desktop-task": "user-owned-desktop-task",
             "explicit-cli": "explicit-codex-cli",
@@ -595,6 +669,41 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(result["model"], "gpt-5.6-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
+    def test_routes_bounded_low_risk_review_to_standard_reviewer(self) -> None:
+        result = load_selector().select(
+            args(
+                self.catalog,
+                kind="review",
+                writes="none",
+                scope="medium",
+                risk="low",
+                ambiguity="low",
+                verification="strong",
+                independent_evidence="required",
+            )
+        )
+        self.assertEqual(result["agent_name"], "delegated_standard_reviewer")
+        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model_reasoning_effort"], "high")
+
+    def test_contract_sensitive_review_routes_to_sol_high(self) -> None:
+        result = load_selector().select(
+            args(
+                self.catalog,
+                kind="review",
+                writes="none",
+                scope="small",
+                risk="low",
+                ambiguity="low",
+                verification="strong",
+                sensitivity="contract-sensitive",
+                independent_evidence="required",
+            )
+        )
+        self.assertEqual(result["agent_name"], "delegated_reviewer")
+        self.assertEqual(result["model"], "gpt-5.6-sol")
+        self.assertEqual(result["model_reasoning_effort"], "high")
+
     def test_routes_high_risk_read_only_scan_to_reviewer(self) -> None:
         result = load_selector().select(
             args(
@@ -623,7 +732,7 @@ class SelectorTests(unittest.TestCase):
         self.assertFalse(result["delegate"])
         self.assertFalse(result["dispatchable"])
         self.assertTrue(result["split_required"])
-        self.assertEqual(result["sequence"], ["delegated_reviewer", "delegated_worker"])
+        self.assertEqual(result["sequence"], ["delegated_standard_reviewer", "delegated_worker"])
         self.assertTrue(all(step["delegate"] for step in result["steps"]))
         self.assertFalse(result["steps"][0]["requires_main_acceptance"])
         self.assertTrue(result["steps"][1]["requires_main_acceptance"])
@@ -649,6 +758,7 @@ class SelectorTests(unittest.TestCase):
             "delegated_explorer",
             "delegated_researcher",
             "delegated_deep_researcher",
+            "delegated_standard_reviewer",
             "delegated_reviewer",
             "delegated_planning_auditor",
         }
@@ -728,7 +838,7 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(result["model"], "gpt-5.6-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
-    def test_routes_non_xhigh_planning_audit_to_reviewer(self) -> None:
+    def test_routes_non_xhigh_bounded_planning_audit_to_standard_reviewer(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -739,7 +849,8 @@ class SelectorTests(unittest.TestCase):
                 ambiguity="medium",
             )
         )
-        self.assertEqual(result["agent_name"], "delegated_reviewer")
+        self.assertEqual(result["agent_name"], "delegated_standard_reviewer")
+        self.assertEqual(result["model"], "gpt-5.6-terra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_uses_xhigh_only_for_high_impact_high_ambiguity_audit(self) -> None:
@@ -778,6 +889,7 @@ class SelectorTests(unittest.TestCase):
             module.PRIORITIES,
             module.WORKLOADS,
             module.VERIFICATIONS,
+            module.SENSITIVITIES,
             module.COORDINATIONS,
         ):
             (
@@ -790,26 +902,27 @@ class SelectorTests(unittest.TestCase):
                 priority,
                 workload,
                 verification,
+                sensitivity,
                 coordination,
             ) = values
-            result = module.select(
-                args(
-                    self.catalog,
-                    kind=kind,
-                    writes=writes,
-                    scope=scope,
-                    risk=risk,
-                    ambiguity=ambiguity,
-                    parallel_value=parallel_value,
-                    priority=priority,
-                    workload=workload,
-                    verification=verification,
-                    coordination=coordination,
-                    steering_trigger=(
-                        "partial-results" if coordination == "steerable" else "none"
-                    ),
-                )
+            candidate = args(
+                self.catalog,
+                kind=kind,
+                writes=writes,
+                scope=scope,
+                risk=risk,
+                ambiguity=ambiguity,
+                parallel_value=parallel_value,
+                priority=priority,
+                workload=workload,
+                verification=verification,
+                sensitivity=sensitivity,
+                coordination=coordination,
+                steering_trigger=(
+                    "partial-results" if coordination == "steerable" else "none"
+                ),
             )
+            result = module.select(candidate)
             label = "/".join(values)
 
             if result.get("split_required"):
@@ -842,6 +955,8 @@ class SelectorTests(unittest.TestCase):
                     and writes == "none"
                     and risk == "low"
                     and ambiguity == "low"
+                    and verification in {"normal", "strong"}
+                    and sensitivity == "none"
                     and kind not in {"review", "planning-audit", "arbitration"}
                 )
                 luna_write = (
@@ -853,15 +968,21 @@ class SelectorTests(unittest.TestCase):
                     and risk == "low"
                     and ambiguity == "low"
                     and verification == "strong"
+                    and sensitivity == "none"
                     and kind in {"documentation", "implementation"}
                 )
                 if not (luna_read or luna_write) or effort not in {"low", "medium"}:
                     violations.append(f"unsafe Luna: {label}")
 
+            if (
+                module.can_use_luna_read(candidate)
+                or module.can_use_luna_write(candidate)
+            ) and model != "gpt-5.6-luna":
+                violations.append(f"non-minimal route skipped Luna: {label}")
+
             if coordination == "steerable" and (
-                agent != "inherited_collaboration_child"
-                or model != "gpt-5.6-sol"
-                or effort != "high"
+                result["recommended_transport"] != "native-named-agent"
+                or result["transport_preference"] != "auto"
             ):
                 violations.append(f"steerable transport mismatch: {label}")
             if priority == "quality" and coordination == "isolated" and model != "gpt-5.6-sol":
