@@ -1,6 +1,6 @@
 # 运行时 Transport
 
-verified_at: 2026-07-26
+verified_at: 2026-08-21
 verification_surface: active Codex Desktop `spawn_agent` schema and accepted delegated dispatch
 
 只在派发 worker、升级后探测能力或声明实际 model/effort 配置时读取本参考。

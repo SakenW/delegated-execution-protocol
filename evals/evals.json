@@ -78,7 +78,7 @@
     {
       "id": 7,
       "prompt": "A request says: review a medium-risk module and then fix the findings in the same delegated task. Route it safely and explain the dependency.",
-      "expected_output": "A forced split into a read-only delegated_reviewer followed sequentially by a bounded delegated_worker after the review findings are accepted.",
+      "expected_output": "A forced split into a read-only delegated_standard_reviewer followed sequentially by a bounded delegated_worker after the review findings are accepted.",
       "files": [],
       "expectations": [
         "Does not assign a write request to the read-only reviewer.",
@@ -116,13 +116,13 @@
     {
       "id": 10,
       "prompt": "The user requests economy mode for a one-off medium-ambiguity change without strong tests. Explain the route, and also state the recommended main-conversation model and effort for the delegated workflow.",
-      "expected_output": "A recorded fallback from economy to balanced Terra/Sol routing, while the main conversation remains gpt-5.6-sol/high.",
+      "expected_output": "A recorded fallback from economy to the lowest safe Terra/Sol route, with gpt-5.6-terra/medium as the selectable main-conversation default rather than gpt-5.6-sol/high.",
       "files": [],
       "expectations": [
         "Rejects Luna because the work is not a low-ambiguity verified batch.",
         "Records why economy fell back to balanced routing.",
         "Does not compensate by using Luna high or xhigh.",
-        "Keeps the main conversation on gpt-5.6-sol/high."
+        "Uses gpt-5.6-terra/medium as the main-conversation default when selectable and records the limitation when the current surface cannot switch it."
       ]
     },
     {
@@ -164,8 +164,8 @@
     },
     {
       "id": 14,
-      "prompt": "Delegate three independent read-only tasks: a small low-risk targeted file scan, a cross-module medium-ambiguity product-boundary investigation, and a correctness-focused runtime visual review that uses a browser and might encounter a hung browser process. The user expects intelligent model and reasoning assignment. The current spawn_agent wrapper supports explicit profile/model/effort overrides.",
-      "expected_output": "The small targeted scan stays in the Sol/high main conversation; the substantial product investigation uses Terra/medium and the correctness review uses Sol/high, with no more than two workers.",
+      "prompt": "Delegate three independent read-only tasks: a small low-risk targeted file scan, a cross-module medium-ambiguity product-boundary investigation, and a cross-module production-sensitive correctness-focused runtime visual review that uses a browser and might encounter a hung browser process. The user expects intelligent model and reasoning assignment. The current spawn_agent wrapper supports explicit profile/model/effort overrides.",
+      "expected_output": "The small targeted scan stays in the Terra/medium main conversation; the substantial product investigation uses Terra/medium and the cross-module correctness review uses Sol/high, with no more than two workers.",
       "files": [],
       "expectations": [
         "Applies the delegation value gate before model selection for all three tasks.",
@@ -181,18 +181,22 @@
       "id": 15,
       "prompt": "Investigate a high-ambiguity product-boundary question across several modules. The work is read-only, low-risk, isolated, and has strong source-level verification. It is research, not a correctness or security review. Route it without overusing Sol.",
       "expected_output": "A delegated_deep_researcher route using gpt-5.6-terra/high through the enforced isolated transport.",
+      "route_args": ["--kind", "scan", "--writes", "none", "--scope", "cross-module", "--task-size", "medium", "--risk", "low", "--ambiguity", "high", "--independent-evidence", "required", "--parallel-value", "useful", "--priority", "economy", "--workload", "one-off", "--verification", "strong", "--sensitivity", "none", "--coordination", "isolated", "--steering-trigger", "none"],
+      "expected_route": {"delegate": true, "agent_name": "delegated_deep_researcher", "model": "gpt-5.6-terra", "model_reasoning_effort": "high"},
       "files": [],
       "expectations": [
         "Selects delegated_deep_researcher with gpt-5.6-terra/high.",
         "Requires read-only execution and evidence with paths, line references, confidence, and unresolved gaps.",
         "Uses explicit CLI or another proven model-capable isolated transport.",
-        "Escalates to Sol/high if risk becomes high, verification becomes weak, or the task turns into correctness review."
+        "Reports an evidence gap if verification becomes weak; escalates to Sol/high only if risk becomes high or the task becomes a high-impact, cross-module, contract-sensitive, or quality-priority review."
       ]
     },
     {
       "id": 16,
       "prompt": "Implement a high-ambiguity but bounded change in one module. Risk is medium, may-edit ownership is explicit, no public contract changes, and strong targeted tests exist. Route it while preserving a strict escalation boundary.",
       "expected_output": "A delegated_complex_worker route using gpt-5.6-terra/high, bounded workspace-write ownership, and strong verification.",
+      "route_args": ["--kind", "implementation", "--writes", "bounded", "--scope", "medium", "--task-size", "medium", "--risk", "medium", "--ambiguity", "high", "--independent-evidence", "none", "--parallel-value", "useful", "--priority", "economy", "--workload", "one-off", "--verification", "strong", "--sensitivity", "none", "--coordination", "isolated", "--steering-trigger", "none"],
+      "expected_route": {"delegate": true, "agent_name": "delegated_complex_worker", "model": "gpt-5.6-terra", "model_reasoning_effort": "high"},
       "files": [],
       "expectations": [
         "Selects delegated_complex_worker with gpt-5.6-terra/high.",
@@ -204,11 +208,13 @@
     {
       "id": 17,
       "prompt": "A low-risk single-file scan is small, read-only, and could technically run in parallel, but independent evidence is not required. Route it while preserving result quality and minimizing token use.",
-      "expected_output": "Stage 0 rejects delegation and keeps the scan in the Sol/high main conversation with the same evidence requirements.",
+      "expected_output": "Stage 0 rejects delegation and keeps the scan in the main conversation with the same evidence requirements; the selectable main default is Terra/medium rather than forced Sol/high.",
+      "route_args": ["--kind", "scan", "--writes", "none", "--scope", "small", "--task-size", "small", "--risk", "low", "--ambiguity", "low", "--independent-evidence", "useful", "--parallel-value", "useful", "--priority", "economy", "--workload", "one-off", "--verification", "strong", "--sensitivity", "none", "--coordination", "isolated", "--steering-trigger", "none"],
+      "expected_route": {"delegate": false, "cost_gate": "rejected", "recommended_transport": "main-conversation"},
       "files": [],
       "expectations": [
         "Rejects delegation because useful parallel value alone does not justify worker cold-start cost.",
-        "Keeps the task in the main conversation instead of downgrading its verification standard.",
+        "Keeps the task in the main conversation without forcing a higher model or downgrading its verification standard.",
         "Still reports paths, evidence, and any unverified conclusion.",
         "Does not start a worker merely to demonstrate model routing."
       ]
@@ -272,6 +278,34 @@
         "Preserves mandatory updates for blocking, safety, external effects, or genuinely long-running work.",
         "Reports the verified task result concisely in the final response."
       ]
+    },
+    {
+      "id": 23,
+      "prompt": "Independently review one bounded module change. Risk is low, scope is not cross-module, source evidence is clear, focused verification is strong, and quality priority was not requested.",
+      "expected_output": "A read-only delegated_standard_reviewer using gpt-5.6-terra/high, with final acceptance retained by the main conversation.",
+      "route_args": ["--kind", "review", "--writes", "none", "--scope", "medium", "--task-size", "small", "--risk", "low", "--ambiguity", "low", "--independent-evidence", "required", "--parallel-value", "none", "--priority", "economy", "--workload", "one-off", "--verification", "strong", "--sensitivity", "none", "--coordination", "isolated", "--steering-trigger", "none"],
+      "expected_route": {"delegate": true, "agent_name": "delegated_standard_reviewer", "model": "gpt-5.6-terra", "model_reasoning_effort": "high"},
+      "files": [],
+      "expectations": ["Uses delegated_standard_reviewer with gpt-5.6-terra/high.", "Keeps the reviewer read-only and bounded to the supplied module.", "Escalates only when objective risk, scope, contract, or evidence triggers appear.", "Leaves final acceptance with the main conversation."]
+    },
+    {
+      "id": 24,
+      "prompt": "Independently review a cross-module production rollback contract with high risk and incomplete verification. Economy is preferred but correctness is mandatory.",
+      "expected_output": "A read-only delegated_reviewer using gpt-5.6-sol/high because the review is high-risk, cross-module, production-sensitive, and weakly verified.",
+      "route_args": ["--kind", "review", "--writes", "none", "--scope", "cross-module", "--task-size", "medium", "--risk", "high", "--ambiguity", "medium", "--independent-evidence", "required", "--parallel-value", "none", "--priority", "economy", "--workload", "one-off", "--verification", "weak", "--sensitivity", "contract-sensitive", "--coordination", "isolated", "--steering-trigger", "none"],
+      "expected_route": {"delegate": true, "agent_name": "delegated_reviewer", "model": "gpt-5.6-sol", "model_reasoning_effort": "high"},
+      "expected_route_contains": {"routing_warnings": ["verification is weak: report evidence gaps and do not present conclusions as verified"]},
+      "files": [],
+      "expectations": ["Uses delegated_reviewer with gpt-5.6-sol/high.", "Does not downgrade a high-risk cross-module production review to Terra.", "Reports the incomplete verification as an evidence gap.", "Keeps the reviewer read-only and final acceptance in the main conversation."]
+    },
+    {
+      "id": 25,
+      "prompt": "Review a bounded low-risk migration contract with strong focused verification. The task is contract-sensitive even though it is not cross-module.",
+      "expected_output": "A delegated_reviewer route using gpt-5.6-sol/high because contract sensitivity overrides the ordinary Terra reviewer tier.",
+      "route_args": ["--kind", "review", "--writes", "none", "--scope", "small", "--task-size", "small", "--risk", "low", "--ambiguity", "low", "--independent-evidence", "required", "--parallel-value", "none", "--priority", "economy", "--workload", "one-off", "--verification", "strong", "--sensitivity", "contract-sensitive", "--coordination", "isolated", "--steering-trigger", "none"],
+      "expected_route": {"delegate": true, "agent_name": "delegated_reviewer", "model": "gpt-5.6-sol", "model_reasoning_effort": "high"},
+      "files": [],
+      "expectations": ["Uses Sol/high despite low risk and bounded scope.", "Does not route a contract-sensitive review to delegated_standard_reviewer.", "Keeps the reviewer read-only.", "Leaves final acceptance with the main conversation."]
     }
   ]
 }

@@ -9,18 +9,21 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import tomllib
+from datetime import date
 from pathlib import Path
 
 
 DEFAULT_SKILL_ROOT = Path(__file__).resolve().parent.parent
 SKILL_NAME = "delegated-execution-protocol"
-VERIFIED_AT = "2026-07-26"
+MAX_RUNTIME_VERIFICATION_AGE_DAYS = 45
 EXPECTED_PROFILES = {
     "delegated_batch_explorer": ("gpt-5.6-luna", "low", "read-only"),
     "delegated_explorer": ("gpt-5.6-terra", "low", "read-only"),
     "delegated_researcher": ("gpt-5.6-terra", "medium", "read-only"),
     "delegated_deep_researcher": ("gpt-5.6-terra", "high", "read-only"),
+    "delegated_standard_reviewer": ("gpt-5.6-terra", "high", "read-only"),
     "delegated_batch_worker": ("gpt-5.6-luna", "medium", "workspace-write"),
     "delegated_worker": ("gpt-5.6-terra", "medium", "workspace-write"),
     "delegated_complex_worker": ("gpt-5.6-terra", "high", "workspace-write"),
@@ -52,6 +55,7 @@ ROUTING_FIELDS = {
     "Workload",
     "Batch size",
     "Verification",
+    "Sensitivity",
     "Coordination",
     "Steering trigger",
     "Requested workers",
@@ -59,6 +63,10 @@ ROUTING_FIELDS = {
     "Transport preference",
     "Selected profile / transport",
     "Assignment evidence",
+    "Outcome",
+    "Prior profile",
+    "Escalation trigger",
+    "Observed verification",
 }
 SELECTOR_OPTIONS = {
     "--kind",
@@ -73,6 +81,7 @@ SELECTOR_OPTIONS = {
     "--workload",
     "--batch-size",
     "--verification",
+    "--sensitivity",
     "--coordination",
     "--steering-trigger",
     "--requested-workers",
@@ -90,6 +99,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--skill-root", type=Path, default=DEFAULT_SKILL_ROOT)
     parser.add_argument("--codex-home", type=Path, default=Path.home() / ".codex")
+    parser.add_argument(
+        "--check-local-profiles",
+        action="store_true",
+        help="also verify a local Codex profile installation under --codex-home",
+    )
     return parser.parse_args()
 
 
@@ -176,7 +190,11 @@ def validate_openai_metadata(skill_root: Path) -> None:
 def validate_runtime_references(skill_root: Path) -> None:
     runtime = (skill_root / "references" / "runtime-transports.md").read_text(encoding="utf-8")
     reporting = (skill_root / "references" / "reporting.md").read_text(encoding="utf-8")
-    require(re.search(rf"^verified_at:\s*{re.escape(VERIFIED_AT)}\s*$", runtime, re.MULTILINE) is not None, "runtime verified_at drifted")
+    verified_at_match = re.search(r"^verified_at:\s*(\d{4}-\d{2}-\d{2})\s*$", runtime, re.MULTILINE)
+    require(verified_at_match is not None, "runtime verified_at is missing or malformed")
+    verified_at = date.fromisoformat(verified_at_match.group(1))
+    verification_age = (date.today() - verified_at).days
+    require(0 <= verification_age <= MAX_RUNTIME_VERIFICATION_AGE_DAYS, "runtime verification is stale or future-dated")
     require(re.search(r"^verification_surface:\s*.+$", runtime, re.MULTILINE) is not None, "runtime verification surface is missing")
     for token in ("fork_turns", "turn_context", "agent_type", "reasoning_effort", "explicit-codex-cli", "native-named-agent"):
         require(token in runtime or token in (skill_root / "SKILL.md").read_text(encoding="utf-8"), f"runtime contract lacks {token}")
@@ -248,21 +266,78 @@ def validate_profile_safety(codex_home: Path) -> None:
         require(effort in supported.get(model, set()), f"catalog does not support {model}/{effort}")
 
 
-def validate_evals(skill_root: Path) -> int:
+def fixture_catalog(path: Path) -> None:
+    supported: dict[str, set[str]] = {}
+    for model, effort, _sandbox in EXPECTED_PROFILES.values():
+        supported.setdefault(model, set()).add(effort)
+    path.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "slug": model,
+                        "supported_reasoning_levels": [
+                            {"effort": effort} for effort in sorted(efforts)
+                        ],
+                    }
+                    for model, efforts in sorted(supported.items())
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def validate_evals(skill_root: Path) -> tuple[int, int]:
     evals = json.loads((skill_root / "evals" / "evals.json").read_text(encoding="utf-8"))
     require(evals.get("skill_name") == SKILL_NAME, "eval skill_name mismatch")
     cases = evals.get("evals")
     require(isinstance(cases, list) and len(cases) >= 20, "at least twenty eval cases are required")
     ids = [case.get("id") for case in cases]
     require(len(ids) == len(set(ids)), "eval ids must be unique")
-    for case in cases:
-        require(isinstance(case.get("id"), int), "eval id must be an integer")
-        require(bool(case.get("prompt")), f"eval {case.get('id')} has no prompt")
-        require(bool(case.get("expected_output")), f"eval {case.get('id')} has no expected output")
-        require(isinstance(case.get("files"), list), f"eval {case.get('id')} files must be a list")
-        expectations = case.get("expectations")
-        require(isinstance(expectations, list) and len(expectations) >= 3, f"eval {case.get('id')} needs at least three expectations")
-    return len(cases)
+    executable_count = 0
+    selector = skill_root / "scripts" / "select_agent_profile.py"
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    with tempfile.TemporaryDirectory() as temp_dir:
+        catalog = Path(temp_dir) / "models_cache.json"
+        fixture_catalog(catalog)
+        for case in cases:
+            require(isinstance(case.get("id"), int), "eval id must be an integer")
+            require(bool(case.get("prompt")), f"eval {case.get('id')} has no prompt")
+            require(bool(case.get("expected_output")), f"eval {case.get('id')} has no expected output")
+            require(isinstance(case.get("files"), list), f"eval {case.get('id')} files must be a list")
+            expectations = case.get("expectations")
+            require(isinstance(expectations, list) and len(expectations) >= 3, f"eval {case.get('id')} needs at least three expectations")
+            route_args = case.get("route_args")
+            expected_route = case.get("expected_route")
+            expected_route_contains = case.get("expected_route_contains")
+            require((route_args is None) == (expected_route is None), f"eval {case.get('id')} must provide route_args and expected_route together")
+            require(expected_route_contains is None or route_args is not None, f"eval {case.get('id')} expected_route_contains requires route_args")
+            if route_args is None:
+                continue
+            require(isinstance(route_args, list) and all(isinstance(item, str) for item in route_args), f"eval {case.get('id')} route_args must be a string list")
+            require(isinstance(expected_route, dict) and expected_route, f"eval {case.get('id')} expected_route must be a non-empty object")
+            result = subprocess.run(
+                [sys.executable, str(selector), *route_args, "--catalog", str(catalog)],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+            )
+            require(result.returncode == 0, f"eval {case.get('id')} selector failed:\n{result.stderr}")
+            actual = json.loads(result.stdout)
+            for key, expected in expected_route.items():
+                require(actual.get(key) == expected, f"eval {case.get('id')} expected {key}={expected!r}, got {actual.get(key)!r}")
+            if expected_route_contains is not None:
+                require(isinstance(expected_route_contains, dict), f"eval {case.get('id')} expected_route_contains must be an object")
+                for key, expected_items in expected_route_contains.items():
+                    actual_items = actual.get(key)
+                    require(isinstance(actual_items, list) and isinstance(expected_items, list), f"eval {case.get('id')} expected list containment for {key}")
+                    require(all(item in actual_items for item in expected_items), f"eval {case.get('id')} missing expected {key} entries")
+            executable_count += 1
+    require(executable_count >= 5, "at least five eval cases must execute the selector")
+    return len(cases), executable_count
 
 
 def main() -> None:
@@ -280,11 +355,13 @@ def main() -> None:
     validate_openai_metadata(skill_root)
     validate_runtime_references(skill_root)
     validate_selector_behavior(skill_root, cache_before)
-    validate_profile_safety(codex_home)
-    eval_count = validate_evals(skill_root)
+    if args.check_local_profiles:
+        validate_profile_safety(codex_home)
+    eval_count, executable_eval_count = validate_evals(skill_root)
     require(not cache_snapshot(skill_root), "protocol validation generated Python cache")
     print(
         f"protocol validation passed: {eval_count} eval definitions validated; "
+        f"{executable_eval_count} executable routes passed; "
         "selector tests passed; cache absent"
     )
 

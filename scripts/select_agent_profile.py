@@ -20,6 +20,7 @@ INDEPENDENT_EVIDENCE = ("none", "useful", "required")
 PRIORITIES = ("economy", "balanced", "quality")
 WORKLOADS = ("one-off", "batch")
 VERIFICATIONS = ("weak", "normal", "strong")
+SENSITIVITIES = ("none", "contract-sensitive")
 COORDINATIONS = ("isolated", "steerable")
 SHARDING_EVIDENCE = ("none", "measured-throughput", "critical-path")
 ISOLATED_TRANSPORT_PREFERENCES = (
@@ -58,9 +59,10 @@ def parse_args() -> argparse.Namespace:
         choices=SHARDING_EVIDENCE,
         default="none",
     )
-    parser.add_argument("--priority", choices=PRIORITIES, default="balanced")
+    parser.add_argument("--priority", choices=PRIORITIES, default="economy")
     parser.add_argument("--workload", choices=WORKLOADS, default="one-off")
     parser.add_argument("--verification", choices=VERIFICATIONS, default="normal")
+    parser.add_argument("--sensitivity", choices=SENSITIVITIES, required=True)
     parser.add_argument("--coordination", choices=COORDINATIONS, default="isolated")
     parser.add_argument(
         "--transport-preference",
@@ -97,7 +99,7 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
         raise SystemExit("isolated coordination cannot declare a steering trigger")
     if args.coordination == "steerable" and args.transport_preference != "auto":
         raise SystemExit(
-            "steerable coordination only supports inherited collaboration; "
+            "steerable coordination requires auto transport with a native named-agent; "
             "isolated transport preferences are not applicable"
         )
     if args.workload != "batch" and args.sharding_evidence != "none":
@@ -106,9 +108,14 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
     high_impact = args.risk in {"high", "critical"}
     high_ambiguity = args.ambiguity == "high"
     weak_verification = args.verification == "weak"
+    contract_sensitive = args.sensitivity == "contract-sensitive"
     broad = args.scope == "cross-module" or args.writes == "broad"
     requested_priority = args.priority
     routing_warnings: list[str] = []
+    if weak_verification:
+        routing_warnings.append(
+            "verification is weak: report evidence gaps and do not present conclusions as verified"
+        )
 
     cost_gate = delegation_value_gate(args)
     if not cost_gate["justified"]:
@@ -141,16 +148,10 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
     worker_budget = worker_budget_for(args)
 
     if args.kind in {"review", "planning-audit", "arbitration"} and args.writes != "none":
-        review_profile = (
-            ("delegated_planning_auditor", "gpt-5.6-sol", "xhigh")
-            if args.kind in {"planning-audit", "arbitration"}
-            and high_impact
-            and high_ambiguity
-            else ("delegated_reviewer", "gpt-5.6-sol", "high")
-        )
+        review_profile = review_profile_for(args)
         worker_profile = (
             ("delegated_senior_worker", "gpt-5.6-sol", "high")
-            if high_impact or broad or weak_verification or requested_priority == "quality"
+            if high_impact or broad or weak_verification or contract_sensitive or requested_priority == "quality"
             else ("delegated_worker", "gpt-5.6-terra", "medium")
         )
         if requested_priority == "economy":
@@ -224,13 +225,18 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
             routing_warnings.append(luna_rejection_reason(args))
         effective_priority = "balanced"
 
-        if args.writes == "none" and (
-            args.kind in {"review", "planning-audit", "arbitration"}
-            or high_impact
-            or weak_verification
-        ):
+        if args.writes == "none" and args.kind in {"review", "planning-audit", "arbitration"}:
+            profile = review_profile_for(args)
+            if profile[0] == "delegated_standard_reviewer":
+                reason = "bounded low- or medium-risk review with verifiable evidence"
+            else:
+                reason = "high-impact, cross-module, weakly verified, or contract-sensitive review"
+        elif args.writes == "none" and (high_impact or contract_sensitive):
             profile = ("delegated_reviewer", "gpt-5.6-sol", "high")
-            reason = "serious read-only review or evidence collection"
+            reason = "high-impact or contract-sensitive read-only evidence collection"
+        elif args.writes == "none" and weak_verification:
+            profile = ("delegated_researcher", "gpt-5.6-terra", "medium")
+            reason = "read-only evidence collection with explicit verification gaps"
         elif (
             args.writes == "none"
             and high_ambiguity
@@ -247,9 +253,9 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
         elif args.writes == "none":
             profile = ("delegated_explorer", "gpt-5.6-terra", "low")
             reason = "bounded read-only evidence collection"
-        elif high_impact or broad or weak_verification:
+        elif high_impact or broad or weak_verification or contract_sensitive:
             profile = ("delegated_senior_worker", "gpt-5.6-sol", "high")
-            reason = "high-risk, weakly verified, or cross-module execution"
+            reason = "high-risk, contract-sensitive, weakly verified, or cross-module execution"
         elif (
             args.writes == "bounded"
             and args.kind in {"documentation", "implementation"}
@@ -314,6 +320,26 @@ def delegation_value_gate(args: argparse.Namespace) -> dict[str, str | bool]:
     }
 
 
+def review_profile_for(args: argparse.Namespace) -> tuple[str, str, str]:
+    """Use Terra for ordinary bounded review and reserve Sol for material review risk."""
+    if (
+        args.kind in {"planning-audit", "arbitration"}
+        and args.risk in {"high", "critical"}
+        and args.ambiguity == "high"
+    ):
+        return ("delegated_planning_auditor", "gpt-5.6-sol", "xhigh")
+    if (
+        args.risk in {"low", "medium"}
+        and args.scope != "cross-module"
+        and args.writes != "broad"
+        and args.verification in {"normal", "strong"}
+        and args.sensitivity == "none"
+        and args.priority != "quality"
+    ):
+        return ("delegated_standard_reviewer", "gpt-5.6-terra", "high")
+    return ("delegated_reviewer", "gpt-5.6-sol", "high")
+
+
 def worker_budget_for(args: argparse.Namespace) -> dict[str, int | bool | str]:
     sharding_justified = (
         args.workload == "batch" and args.sharding_evidence != "none"
@@ -348,6 +374,7 @@ def can_use_luna_read(args: argparse.Namespace) -> bool:
         and args.risk == "low"
         and args.ambiguity == "low"
         and args.verification in {"normal", "strong"}
+        and args.sensitivity == "none"
         and args.kind not in {"review", "planning-audit", "arbitration"}
     )
 
@@ -362,6 +389,7 @@ def can_use_luna_write(args: argparse.Namespace) -> bool:
         and args.risk == "low"
         and args.ambiguity == "low"
         and args.verification == "strong"
+        and args.sensitivity == "none"
         and args.kind in {"documentation", "implementation"}
     )
 
@@ -380,6 +408,8 @@ def luna_rejection_reason(args: argparse.Namespace) -> str:
         failed.append("read verification is weak")
     if args.kind in {"review", "planning-audit", "arbitration"}:
         failed.append("task requires judgment")
+    if args.sensitivity != "none":
+        failed.append("task is contract-sensitive")
     if args.writes == "broad" or (args.writes != "none" and args.scope == "cross-module"):
         failed.append("write scope is too broad")
     if args.writes != "none" and args.verification != "strong":

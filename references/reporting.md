@@ -35,6 +35,10 @@ Ownership: <may edit / must not edit>
 Profile: <agent, model/effort, transport, required evidence>
 Constraints: <context mode, commands, safety boundary>
 Output: <changed files, validation, evidence, residual risk>
+Outcome: <accepted | escalate-one-tier | main-reclaim>
+Prior profile: <none or previous profile>
+Escalation trigger: <objective failure, evidence gap, risk/scope/contract change, or none>
+Observed verification: <command/result or explicit unverified gap>
 ```
 
 不要粘贴完整规则文件、Skill 正文、Brain 页面或主对话推理。

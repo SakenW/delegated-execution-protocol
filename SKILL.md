@@ -11,7 +11,7 @@ description: 用于可能受益于有界委派、并行执行、独立审查或�
 
 ## 主对话配置
 
-推荐主对话使用 `gpt-5.6-sol` / high。xhigh 只用于有界、高影响且高歧义的规划审计。不要路由 `max`。
+主对话默认使用 `gpt-5.6-terra` / medium，负责规划、集成和最终判断。低风险确定性 batch 优先 Luna；普通研究、实现和有清晰证据的有界审查使用 Terra；只有高风险、跨模块、合同敏感、质量优先或证据冲突才升级 Sol。若调用面不能选择主模型，保留当前会话配置并记录限制，不伪称已切换。xhigh 只用于有界、高影响且高歧义的规划审计。不要路由 `max`。
 
 ## Stage 0：委派价值门
 
@@ -42,7 +42,7 @@ micro/small 工作在独立证据仅为 useful 或不需要时留在主对话。
 
 ## 路由记录
 
-以下字段由当前证据推断，不得转化为用户问卷。只有缺失信息会实质改变委派决定、写权限、安全边界或验收标准时，才询问一个高信息量问题；其余字段采用保守默认并继续。
+以下字段由当前证据推断，不得转化为用户问卷。只有缺失信息会实质改变委派决定、写权限、安全边界或验收标准时，才询问一个高信息量问题；其余字段采用保守默认并继续。`Priority` 默认 `economy`：先选择最低已验证够用档，只有用户明确质量优先或风险证据触发时才升档。
 
 ```text
 Task:
@@ -58,6 +58,7 @@ Priority: economy | balanced | quality
 Workload: one-off | batch
 Batch size:
 Verification: weak | normal | strong
+Sensitivity: none | contract-sensitive
 Coordination: isolated | steerable
 Steering trigger: none | partial-results | user-steering | shared-session-state | risk-cancellation
 Requested workers:
@@ -65,6 +66,10 @@ Sharding evidence: none | measured-throughput | critical-path
 Transport preference: auto | native-verified | user-owned-desktop-task | explicit-cli
 Selected profile / transport:
 Assignment evidence:
+Outcome: accepted | escalate-one-tier | main-reclaim
+Prior profile:
+Escalation trigger:
+Observed verification:
 ```
 
 只对通过 Stage 0 的真实委派候选运行确定性 selector：
@@ -74,8 +79,8 @@ python3 <skill-dir>/scripts/select_agent_profile.py \
   --kind implementation --writes bounded --scope medium \
   --task-size medium --risk low --ambiguity low \
   --independent-evidence none --parallel-value useful \
-  --priority balanced --workload one-off --batch-size 1 \
-  --verification strong --coordination isolated \
+  --priority economy --workload one-off --batch-size 1 \
+  --verification strong --sensitivity none --coordination isolated \
   --steering-trigger none --requested-workers 1 \
   --sharding-evidence none --transport-preference auto
 ```
@@ -91,15 +96,16 @@ python3 <skill-dir>/scripts/select_agent_profile.py \
 | `delegated_explorer` | 聚焦的只读证据收集 | `gpt-5.6-terra` / low |
 | `delegated_researcher` | 多文件或中歧义研究 | `gpt-5.6-terra` / medium |
 | `delegated_deep_researcher` | 高歧义、有界风险研究 | `gpt-5.6-terra` / high |
+| `delegated_standard_reviewer` | 低/中风险、有界且证据清晰的普通审查 | `gpt-5.6-terra` / high |
 | `delegated_worker` | 普通有界实现或文档工作 | `gpt-5.6-terra` / medium |
 | `delegated_complex_worker` | 强验证保护的高歧义有界工作 | `gpt-5.6-terra` / high |
 | `delegated_senior_worker` | 跨模块或高风险实现 | `gpt-5.6-sol` / high |
 | `delegated_reviewer` | 正确性、安全、迁移、计费或生产审查 | `gpt-5.6-sol` / high |
 | `delegated_planning_auditor` | 高影响且高歧义的规划审计或仲裁 | `gpt-5.6-sol` / xhigh |
 
-Luna 仅允许 batch、isolated、低风险、低歧义且不需要审查判断的工作。Luna 只读要求 normal/strong verification；Luna 写入还必须是有界、非跨模块并具备 strong verification。禁止用 Luna high/xhigh 补偿风险。
+Luna 仅允许 batch、isolated、低风险、低歧义且不需要审查判断的工作。Luna 只读要求 normal/strong verification；Luna 写入还必须是有界、非跨模块并具备 strong verification。满足 Luna 安全门时默认使用 Luna，不要求用户额外声明省钱；禁止用 Luna high/xhigh 补偿风险。
 
-Terra/high 仅允许 isolated、低/中风险、高歧义且证据可验证的研究，或 strong verification 保护的有界非跨模块实现。high/critical 风险、weak verification、broad/cross-module 写入、公开合同、quality 优先和审查判断使用 Sol/high。
+Terra/high 仅允许 isolated、低/中风险且证据可验证的高歧义研究、普通有界审查，或 strong verification 保护的有界非跨模块实现。普通审查只有在低/中风险、非跨模块、normal/strong verification 且非 quality 优先时使用 `delegated_standard_reviewer`；high/critical 风险、跨模块审查、安全、权限、迁移、计费、生产、回滚、公开合同、quality 优先或证据冲突使用 `delegated_reviewer` Sol/high。weak verification 必须显式报告证据缺口，不能仅靠升级模型补偿。
 
 review/planning-audit/arbitration 与写入组合时，selector 顶层返回 `delegate=false`、`dispatchable=false` 和 `split_required=true`，不得直接派发顶层结果。按只读判断、主线程接受、再有界执行拆分；每个可委派 step 都返回 `delegate=true`，写入 step 还必须返回 `requires_main_acceptance=true`。xhigh 只用于规划影响和歧义都为 high 的情况。
 
@@ -140,7 +146,7 @@ steerable 的 `Transport preference` 必须为 `auto`，并使用 selector 选�
 
 ## 主线程审查
 
-主对话检查证据、所有权、完整 diff、测试和升级触发条件。风险扩大、验证变弱、合同跨模块、证据冲突或信心不足时，升级模型或把工作收回主对话。
+主对话检查证据、所有权、完整 diff、测试和升级触发条件，并为实际委派记录 `Outcome`、`Prior profile`、`Escalation trigger` 与 `Observed verification`。只有客观失败、证据缺口、风险扩大、合同跨模块或证据冲突时才逐级升级；模型自报低信心不能单独触发升级。每次最多升一级，Sol 仍不足或任务越出授权边界时使用 `main-reclaim` 收回主对话，禁止循环重试。
 
 ## 派发汇报规则
 
