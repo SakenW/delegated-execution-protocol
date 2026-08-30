@@ -103,9 +103,9 @@ python3 <skill-dir>/scripts/select_agent_profile.py \
 | `delegated_reviewer` | 正确性、安全、迁移、计费或生产审查 | `gpt-5.6-sol` / high |
 | `delegated_planning_auditor` | 高影响且高歧义的规划审计或仲裁 | `gpt-5.6-sol` / xhigh |
 
-Luna 仅允许 batch、isolated、低风险、低歧义且不需要审查判断的工作。Luna 只读要求 normal/strong verification；Luna 写入还必须是有界、非跨模块并具备 strong verification。满足 Luna 安全门时默认使用 Luna，不要求用户额外声明省钱；禁止用 Luna high/xhigh 补偿风险。
+Luna 仅允许 `batch_size>=10` 的 batch、isolated、低风险、低歧义且不需要审查判断的工作。Luna 只读要求 normal/strong verification；Luna 写入还必须是有界、非跨模块并具备 strong verification。满足 Luna 安全门时默认使用 Luna，不要求用户额外声明省钱；禁止用 Luna high/xhigh 补偿风险。
 
-Terra/high 仅允许 isolated、低/中风险且证据可验证的高歧义研究、普通有界审查，或 strong verification 保护的有界非跨模块实现。普通审查只有在低/中风险、非跨模块、normal/strong verification 且非 quality 优先时使用 `delegated_standard_reviewer`；high/critical 风险、跨模块审查、安全、权限、迁移、计费、生产、回滚、公开合同、quality 优先或证据冲突使用 `delegated_reviewer` Sol/high。weak verification 必须显式报告证据缺口，不能仅靠升级模型补偿。
+Terra/high 允许低/中风险且证据可验证的高歧义研究、普通有界审查，或 strong verification 保护的有界非跨模块实现；isolated 与存在具体 trigger 的 steerable 均可通过当前 named-agent profile override 执行。普通审查只有在低/中风险、非跨模块、normal/strong verification 且非 quality 优先时使用 `delegated_standard_reviewer`；high/critical 风险、跨模块审查、安全、权限、迁移、计费、生产、回滚、公开合同、quality 优先或证据冲突使用 `delegated_reviewer` Sol/high。weak verification 必须显式报告证据缺口，不能仅靠升级模型补偿。
 
 review/planning-audit/arbitration 与写入组合时，selector 顶层返回 `delegate=false`、`dispatchable=false` 和 `split_required=true`，不得直接派发顶层结果。按只读判断、主线程接受、再有界执行拆分；每个可委派 step 都返回 `delegate=true`，写入 step 还必须返回 `requires_main_acceptance=true`。xhigh 只用于规划影响和歧义都为 high 的情况。
 
@@ -118,6 +118,8 @@ review/planning-audit/arbitration 与写入组合时，selector 顶层返回 `de
 - 不要仅为了减少主线程注意力而委派。
 
 selector 返回 `max_workers`、`bundle_required`、`sharding_evidence` 和 `sharding_justified`。重新分类或打包，不得忽略这些输出。
+
+`batch_size>=10` 与最多 2 个 worker 是防止冷启动浪费和失控分片的护栏，不是要凑满的质量目标。不得拆分、填充或改写任务来命中阈值，也不得把 2 个 worker 当作默认配额；实际工作量和已测吞吐量不足时仍用更少 worker 或留在主对话。
 
 ## 派发 transport 门
 
@@ -146,7 +148,7 @@ steerable 的 `Transport preference` 必须为 `auto`，并使用 selector 选�
 
 ## 主线程审查
 
-主对话检查证据、所有权、完整 diff、测试和升级触发条件，并为实际委派记录 `Outcome`、`Prior profile`、`Escalation trigger` 与 `Observed verification`。只有客观失败、证据缺口、风险扩大、合同跨模块或证据冲突时才逐级升级；模型自报低信心不能单独触发升级。每次最多升一级，Sol 仍不足或任务越出授权边界时使用 `main-reclaim` 收回主对话，禁止循环重试。
+主对话检查证据、所有权、完整 diff、测试和升级触发条件，并为实际委派记录 `Outcome`、`Prior profile`、`Escalation trigger` 与 `Observed verification`。在既有 `Outcome` / `Observed verification` 周期中复核误派、等待成本和集成成本：若实际结果频繁 `escalate-one-tier`、`main-reclaim`、等待超过关键路径收益，或集成成本吞噬并行收益，就在下一次重新分类、打包或留在主对话；不为反馈新增 selector 状态，也不按 10 项或 2 worker 阈值优化表面指标。只有客观失败、证据缺口、风险扩大、合同跨模块或证据冲突时才逐级升级；模型自报低信心不能单独触发升级。每次最多升一级，Sol 仍不足或任务越出授权边界时使用 `main-reclaim` 收回主对话，禁止循环重试。
 
 ## 派发汇报规则
 
@@ -156,8 +158,14 @@ steerable 的 `Transport preference` 必须为 `auto`，并使用 selector 选�
 
 ## 主验证命令
 
-该命令会运行 selector 行为测试、结构与配置安全检查，并要求 Skill 源目录不存在 Python cache，且验证过程不得生成新缓存：
+该命令会运行 selector 行为测试、结构与配置安全检查，以及 static/manual contract 的受控路径与必需 token 检查；后者只证明静态合同仍存在，不等同端到端行为。验证还要求 Skill 源目录不存在 Python cache，且过程不得生成新缓存：
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_protocol.py
+```
+
+默认验证使用临时 fixture catalog，不读取 `~/.codex`。需要同时核验本机注册 profile 与真实模型目录时显式运行：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_protocol.py --check-local-profiles
 ```

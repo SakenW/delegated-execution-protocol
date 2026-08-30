@@ -9,7 +9,8 @@ The protocol is written primarily in Chinese; the scripts and structured output 
 ## What it enforces
 
 - Keep trivial, sequential work in the main conversation.
-- Require a concrete reason before starting a worker: independent evidence, an amortized batch, bounded ownership, critical-path parallelism, or live steering.
+- Require a concrete reason before starting a worker: independent evidence, a batch of at least 10 homogeneous items, bounded ownership, critical-path parallelism, or live steering.
+- Reject incompatible task-kind/write combinations before routing them to a worker.
 - Separate read-only review from writes, with explicit main-thread acceptance between them.
 - Cap one-off and batch concurrency at two workers; batches default to one unless throughput evidence justifies sharding.
 - Treat declared model labels as untrusted until the runtime proves the actual model, reasoning effort, and transport.
@@ -21,6 +22,7 @@ The protocol is written primarily in Chinese; the scripts and structured output 
 - `SKILL.md` — the protocol used by an agent.
 - `scripts/select_agent_profile.py` — deterministic routing selector that emits JSON.
 - `scripts/test_select_agent_profile.py` — behavior tests for the selector.
+- `scripts/test_validate_protocol.py` — fail-closed tests for static/manual contract validation.
 - `scripts/validate_protocol.py` — structure, safety, and behavior validation.
 - `evals/evals.json` — scenario-based evaluation set.
 - `references/` — concise transport and reporting contracts.
@@ -32,6 +34,8 @@ Clone the repository, then run the self-contained validation:
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_protocol.py
 ```
+
+The validator executes selector routes and controlled file/token checks for manual contracts. Those static checks prove that required policy text remains present; they are explicitly not end-to-end agent-runtime evidence.
 
 To route a task, describe its observable properties rather than guessing a model first:
 
