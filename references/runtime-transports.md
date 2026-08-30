@@ -1,6 +1,6 @@
 # 运行时 Transport
 
-verified_at: 2026-08-21
+verified_at: 2026-08-28
 verification_surface: active Codex Desktop `spawn_agent` schema and accepted delegated dispatch
 
 只在派发 worker、升级后探测能力或声明实际 model/effort 配置时读取本参考。
@@ -9,7 +9,7 @@ verification_surface: active Codex Desktop `spawn_agent` schema and accepted del
 
 自定义 agent 位于 `~/.codex/agents/*.toml` 或项目 `.codex/agents/*.toml`。每个 profile 需要 `name`、`description`、`developer_instructions`、`model` 和 `model_reasoning_effort`，并在 `~/.codex/config.toml` 的 `[agents.<name>]` 下注册。
 
-当前已验证边界：Desktop 协作 wrapper 暴露 `agent_type`、`model`、`reasoning_effort`、task name、message 和 `fork_turns`。设置 model 或 effort override 时，`fork_turns` 必须为 `none` 或较小正数；完整历史 fork 不接受 override。优先使用已注册的 `delegated_*` agent type 绑定完整 profile；Luna 只能通过固定的 batch agent type 使用。只有 `default` agent 确需覆盖时才传 model/effort，当前可覆盖模型为 `gpt-5.6-sol` 与 `gpt-5.6-terra`。不得把 task name 或 prompt 标签当作 profile 绑定。
+当前已验证边界：Desktop 协作 wrapper 暴露 `agent_type`、`model`、`reasoning_effort`、task name、message 和 `fork_turns`。设置 model 或 effort override 时，`fork_turns` 必须为 `none` 或较小正数；完整历史 fork 不接受 override。当前 schema 的 `default` agent override 可选 `gpt-5.5`、`gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` 与 `gpt-5.4-mini`，这是 transport 能力清单，不是协议路由许可；本协议仍只派发已注册的 GPT-5.6 `delegated_*` profiles。优先使用已注册的 `agent_type` 绑定完整 profile，只有 `default` agent 确有需要时才显式覆盖 model/effort。不得把 task name 或 prompt 标签当作 profile 绑定。
 
 原生派发调用被工具接受可作为 assignment evidence；只有 child rollout 的 `turn_context` 等运行时元数据才能证明实际 model/effort。工具 schema、Codex 版本或模型目录变化后重新做最小 probe。
 

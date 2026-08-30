@@ -11,6 +11,14 @@ from typing import Any
 
 KINDS = ("scan", "documentation", "implementation", "review", "planning-audit", "arbitration")
 WRITES = ("none", "bounded", "broad")
+ALLOWED_WRITES_BY_KIND = {
+    "scan": frozenset({"none"}),
+    "documentation": frozenset(WRITES),
+    "implementation": frozenset(WRITES),
+    "review": frozenset(WRITES),
+    "planning-audit": frozenset(WRITES),
+    "arbitration": frozenset(WRITES),
+}
 SCOPES = ("small", "medium", "cross-module")
 LEVELS = ("low", "medium", "high", "critical")
 AMBIGUITIES = ("low", "medium", "high")
@@ -90,6 +98,10 @@ def positive_int(value: str) -> int:
 
 
 def select(args: argparse.Namespace) -> dict[str, Any]:
+    if args.writes not in ALLOWED_WRITES_BY_KIND.get(args.kind, frozenset()):
+        raise SystemExit(
+            f"incompatible kind/writes combination: {args.kind} requires writes=none"
+        )
     if args.coordination == "steerable" and args.steering_trigger == "none":
         raise SystemExit(
             "steerable coordination requires a concrete steering trigger: "
@@ -369,6 +381,7 @@ def can_use_luna_read(args: argparse.Namespace) -> bool:
     return (
         args.priority == "economy"
         and args.workload == "batch"
+        and args.batch_size >= 10
         and args.coordination == "isolated"
         and args.writes == "none"
         and args.risk == "low"
@@ -383,6 +396,7 @@ def can_use_luna_write(args: argparse.Namespace) -> bool:
     return (
         args.priority == "economy"
         and args.workload == "batch"
+        and args.batch_size >= 10
         and args.coordination == "isolated"
         and args.writes == "bounded"
         and args.scope != "cross-module"
@@ -398,6 +412,8 @@ def luna_rejection_reason(args: argparse.Namespace) -> str:
     failed: list[str] = []
     if args.workload != "batch":
         failed.append("workload is not batch")
+    elif args.batch_size < 10:
+        failed.append("batch size is below 10")
     if args.coordination != "isolated":
         failed.append("coordination requires a steerable worker")
     if args.risk != "low":

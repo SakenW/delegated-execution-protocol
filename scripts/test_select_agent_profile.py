@@ -223,6 +223,49 @@ class SelectorTests(unittest.TestCase):
         )
         self.assertFalse(result["delegate"])
 
+    def test_batch_size_one_does_not_qualify_for_luna(self) -> None:
+        result = load_selector().select(
+            args(
+                self.catalog,
+                kind="scan",
+                writes="none",
+                scope="medium",
+                risk="low",
+                ambiguity="low",
+                parallel_value="useful",
+                task_size="medium",
+                workload="batch",
+                batch_size=1,
+                priority="economy",
+            )
+        )
+        self.assertTrue(result["delegate"])
+        self.assertEqual(result["agent_name"], "delegated_explorer")
+        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertTrue(any("below 10" in item for item in result["routing_warnings"]))
+
+    def test_batch_size_nine_does_not_qualify_for_luna(self) -> None:
+        result = load_selector().select(
+            args(
+                self.catalog,
+                kind="scan",
+                writes="none",
+                scope="small",
+                risk="low",
+                ambiguity="low",
+                parallel_value="none",
+                task_size="small",
+                independent_evidence="required",
+                workload="batch",
+                batch_size=9,
+                priority="economy",
+            )
+        )
+        self.assertTrue(result["delegate"])
+        self.assertEqual(result["agent_name"], "delegated_explorer")
+        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertTrue(any("below 10" in item for item in result["routing_warnings"]))
+
     def test_batch_threshold_amortizes_cold_start_and_preserves_luna_route(self) -> None:
         result = load_selector().select(
             args(
@@ -348,6 +391,7 @@ class SelectorTests(unittest.TestCase):
                 ambiguity="low",
                 priority="economy",
                 workload="batch",
+                batch_size=10,
                 verification="normal",
             )
         )
@@ -366,6 +410,7 @@ class SelectorTests(unittest.TestCase):
                 ambiguity="low",
                 priority="economy",
                 workload="batch",
+                batch_size=10,
                 verification="strong",
             )
         )
@@ -421,6 +466,7 @@ class SelectorTests(unittest.TestCase):
                 ambiguity="low",
                 priority="economy",
                 workload="batch",
+                batch_size=10,
                 verification="weak",
             )
         )
@@ -459,6 +505,7 @@ class SelectorTests(unittest.TestCase):
                 ambiguity="low",
                 priority="economy",
                 workload="batch",
+                batch_size=10,
                 verification="normal",
                 coordination="steerable",
                 steering_trigger="partial-results",
@@ -546,6 +593,7 @@ class SelectorTests(unittest.TestCase):
                 ambiguity="low",
                 priority="economy",
                 workload="batch",
+                batch_size=10,
             )
         )
         self.assertEqual(result["agent_name"], "delegated_explorer")
@@ -588,6 +636,7 @@ class SelectorTests(unittest.TestCase):
                     ambiguity="low",
                     priority="economy",
                     workload="batch",
+                    batch_size=10,
                     verification="strong",
                 )
             )
@@ -623,6 +672,25 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(result["model"], "gpt-5.6-terra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
+    def test_routes_steerable_high_ambiguity_research_to_terra_high(self) -> None:
+        result = load_selector().select(
+            args(
+                self.catalog,
+                kind="scan",
+                writes="none",
+                scope="cross-module",
+                risk="low",
+                ambiguity="high",
+                verification="strong",
+                coordination="steerable",
+                steering_trigger="partial-results",
+            )
+        )
+        self.assertEqual(result["agent_name"], "delegated_deep_researcher")
+        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model_reasoning_effort"], "high")
+        self.assertEqual(result["recommended_transport"], "native-named-agent")
+
     def test_routes_strongly_verified_complex_bounded_write_to_terra_high(self) -> None:
         result = load_selector().select(
             args(
@@ -638,6 +706,54 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(result["agent_name"], "delegated_complex_worker")
         self.assertEqual(result["model"], "gpt-5.6-terra")
         self.assertEqual(result["model_reasoning_effort"], "high")
+
+    def test_routes_steerable_complex_bounded_write_to_terra_high(self) -> None:
+        result = load_selector().select(
+            args(
+                self.catalog,
+                kind="implementation",
+                writes="bounded",
+                scope="medium",
+                risk="medium",
+                ambiguity="high",
+                verification="strong",
+                coordination="steerable",
+                steering_trigger="risk-cancellation",
+            )
+        )
+        self.assertEqual(result["agent_name"], "delegated_complex_worker")
+        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model_reasoning_effort"], "high")
+        self.assertEqual(result["recommended_transport"], "native-named-agent")
+
+    def test_kind_write_compatibility_fails_closed(self) -> None:
+        for writes in ("bounded", "broad"):
+            with self.subTest(kind="scan", writes=writes):
+                with self.assertRaisesRegex(SystemExit, "incompatible kind/writes"):
+                    load_selector().select(
+                        args(self.catalog, kind="scan", writes=writes)
+                    )
+
+    def test_documentation_implementation_and_review_write_contracts(self) -> None:
+        for kind in ("documentation", "implementation"):
+            for writes in load_selector().WRITES:
+                with self.subTest(kind=kind, writes=writes):
+                    result = load_selector().select(
+                        args(self.catalog, kind=kind, writes=writes)
+                    )
+                    self.assertNotIn("dispatchable", result)
+        for kind in ("review", "planning-audit", "arbitration"):
+            result = load_selector().select(
+                args(self.catalog, kind=kind, writes="none")
+            )
+            self.assertNotIn("split_required", result)
+            for writes in ("bounded", "broad"):
+                with self.subTest(kind=kind, writes=writes):
+                    result = load_selector().select(
+                        args(self.catalog, kind=kind, writes=writes)
+                    )
+                    self.assertTrue(result["split_required"])
+                    self.assertFalse(result["dispatchable"])
 
     def test_quality_priority_routes_low_risk_read_only_to_sol_high(self) -> None:
         result = load_selector().select(
@@ -905,6 +1021,7 @@ class SelectorTests(unittest.TestCase):
                 sensitivity,
                 coordination,
             ) = values
+            label = "/".join(values)
             candidate = args(
                 self.catalog,
                 kind=kind,
@@ -922,8 +1039,13 @@ class SelectorTests(unittest.TestCase):
                     "partial-results" if coordination == "steerable" else "none"
                 ),
             )
-            result = module.select(candidate)
-            label = "/".join(values)
+            try:
+                result = module.select(candidate)
+            except SystemExit as exc:
+                if writes not in module.ALLOWED_WRITES_BY_KIND[kind]:
+                    continue
+                violations.append(f"unexpected rejection: {label}: {exc}")
+                continue
 
             if result.get("split_required"):
                 if kind not in {"review", "planning-audit", "arbitration"} or writes == "none":
@@ -951,6 +1073,7 @@ class SelectorTests(unittest.TestCase):
                 luna_read = (
                     priority == "economy"
                     and workload == "batch"
+                    and candidate.batch_size >= 10
                     and coordination == "isolated"
                     and writes == "none"
                     and risk == "low"
@@ -962,6 +1085,7 @@ class SelectorTests(unittest.TestCase):
                 luna_write = (
                     priority == "economy"
                     and workload == "batch"
+                    and candidate.batch_size >= 10
                     and coordination == "isolated"
                     and writes == "bounded"
                     and scope != "cross-module"

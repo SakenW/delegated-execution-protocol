@@ -39,6 +39,7 @@ REQUIRED_FILES = {
     "references/runtime-transports.md",
     "scripts/select_agent_profile.py",
     "scripts/test_select_agent_profile.py",
+    "scripts/test_validate_protocol.py",
     "scripts/validate_protocol.py",
 }
 ROUTING_FIELDS = {
@@ -196,7 +197,16 @@ def validate_runtime_references(skill_root: Path) -> None:
     verification_age = (date.today() - verified_at).days
     require(0 <= verification_age <= MAX_RUNTIME_VERIFICATION_AGE_DAYS, "runtime verification is stale or future-dated")
     require(re.search(r"^verification_surface:\s*.+$", runtime, re.MULTILINE) is not None, "runtime verification surface is missing")
-    for token in ("fork_turns", "turn_context", "agent_type", "reasoning_effort", "explicit-codex-cli", "native-named-agent"):
+    for token in (
+        "fork_turns",
+        "turn_context",
+        "agent_type",
+        "reasoning_effort",
+        "explicit-codex-cli",
+        "native-named-agent",
+        "gpt-5.5",
+        "gpt-5.4-mini",
+    ):
         require(token in runtime or token in (skill_root / "SKILL.md").read_text(encoding="utf-8"), f"runtime contract lacks {token}")
     require(reporting.count("```text") >= 3, "reporting reference lacks route examples")
     for token in ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"):
@@ -206,6 +216,7 @@ def validate_runtime_references(skill_root: Path) -> None:
 def validate_selector_behavior(skill_root: Path, cache_before: dict[str, tuple[int, int]]) -> None:
     selector = skill_root / "scripts" / "select_agent_profile.py"
     tests = skill_root / "scripts" / "test_select_agent_profile.py"
+    validator_tests = skill_root / "scripts" / "test_validate_protocol.py"
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
 
@@ -228,6 +239,18 @@ def validate_selector_behavior(skill_root: Path, cache_before: dict[str, tuple[i
         env=env,
     )
     require(test_result.returncode == 0, f"profile selector tests failed:\n{test_result.stderr}")
+
+    validator_test_result = subprocess.run(
+        [sys.executable, str(validator_tests)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    require(
+        validator_test_result.returncode == 0,
+        f"static/manual contract validator tests failed:\n{validator_test_result.stderr}",
+    )
     require(cache_snapshot(skill_root) == cache_before, "validation generated or modified Python cache")
 
 
@@ -288,7 +311,59 @@ def fixture_catalog(path: Path) -> None:
     )
 
 
-def validate_evals(skill_root: Path) -> tuple[int, int]:
+def validate_static_contract_checks(skill_root: Path, case: dict[str, object]) -> int:
+    case_id = case.get("id")
+    checks = case.get("contract_checks")
+    require(
+        isinstance(checks, list) and bool(checks),
+        f"eval {case_id} manual contract needs non-empty contract_checks",
+    )
+    root = skill_root.resolve()
+    for index, check in enumerate(checks, start=1):
+        require(
+            isinstance(check, dict)
+            and set(check) == {"path", "required_tokens"},
+            f"eval {case_id} contract check {index} must contain only path and required_tokens",
+        )
+        target = check.get("path")
+        require(
+            isinstance(target, str) and bool(target.strip()),
+            f"eval {case_id} contract check {index} has an invalid path",
+        )
+        relative_path = Path(target)
+        require(
+            not relative_path.is_absolute() and ".." not in relative_path.parts,
+            f"eval {case_id} contract check {index} has an unsafe target path: {target}",
+        )
+        resolved = (root / relative_path).resolve()
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            require(
+                False,
+                f"eval {case_id} contract check {index} escapes the skill root: {target}",
+            )
+        require(
+            resolved.is_file(),
+            f"eval {case_id} contract check {index} target does not exist: {target}",
+        )
+        required_tokens = check.get("required_tokens")
+        require(
+            isinstance(required_tokens, list)
+            and bool(required_tokens)
+            and all(isinstance(token, str) and bool(token.strip()) for token in required_tokens),
+            f"eval {case_id} contract check {index} needs non-empty required_tokens",
+        )
+        content = resolved.read_text(encoding="utf-8")
+        for token in required_tokens:
+            require(
+                token in content,
+                f"eval {case_id} contract check {index} missing required token {token!r} in {target}",
+            )
+    return len(checks)
+
+
+def validate_evals(skill_root: Path) -> tuple[int, int, int, int]:
     evals = json.loads((skill_root / "evals" / "evals.json").read_text(encoding="utf-8"))
     require(evals.get("skill_name") == SKILL_NAME, "eval skill_name mismatch")
     cases = evals.get("evals")
@@ -296,6 +371,8 @@ def validate_evals(skill_root: Path) -> tuple[int, int]:
     ids = [case.get("id") for case in cases]
     require(len(ids) == len(set(ids)), "eval ids must be unique")
     executable_count = 0
+    manual_count = 0
+    static_contract_check_count = 0
     selector = skill_root / "scripts" / "select_agent_profile.py"
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -312,9 +389,26 @@ def validate_evals(skill_root: Path) -> tuple[int, int]:
             route_args = case.get("route_args")
             expected_route = case.get("expected_route")
             expected_route_contains = case.get("expected_route_contains")
-            require((route_args is None) == (expected_route is None), f"eval {case.get('id')} must provide route_args and expected_route together")
-            require(expected_route_contains is None or route_args is not None, f"eval {case.get('id')} expected_route_contains requires route_args")
+            manual_contract = case.get("manual_contract")
+            contract_checks = case.get("contract_checks")
+            require(
+                (route_args is not None and manual_contract is None and contract_checks is None)
+                or (route_args is None and manual_contract is True),
+                f"eval {case.get('id')} must be executable or explicitly manual_contract=true",
+            )
+            require(
+                (route_args is None) == (expected_route is None),
+                f"eval {case.get('id')} must provide route_args and expected_route together",
+            )
+            require(
+                expected_route_contains is None or route_args is not None,
+                f"eval {case.get('id')} expected_route_contains requires route_args",
+            )
             if route_args is None:
+                static_contract_check_count += validate_static_contract_checks(
+                    skill_root, case
+                )
+                manual_count += 1
                 continue
             require(isinstance(route_args, list) and all(isinstance(item, str) for item in route_args), f"eval {case.get('id')} route_args must be a string list")
             require(isinstance(expected_route, dict) and expected_route, f"eval {case.get('id')} expected_route must be a non-empty object")
@@ -337,7 +431,12 @@ def validate_evals(skill_root: Path) -> tuple[int, int]:
                     require(all(item in actual_items for item in expected_items), f"eval {case.get('id')} missing expected {key} entries")
             executable_count += 1
     require(executable_count >= 5, "at least five eval cases must execute the selector")
-    return len(cases), executable_count
+    require(executable_count + manual_count == len(cases), "eval accounting mismatch")
+    require(
+        static_contract_check_count >= manual_count,
+        "every manual contract needs at least one static contract check",
+    )
+    return len(cases), executable_count, manual_count, static_contract_check_count
 
 
 def main() -> None:
@@ -357,12 +456,19 @@ def main() -> None:
     validate_selector_behavior(skill_root, cache_before)
     if args.check_local_profiles:
         validate_profile_safety(codex_home)
-    eval_count, executable_eval_count = validate_evals(skill_root)
+    (
+        eval_count,
+        executable_eval_count,
+        manual_eval_count,
+        static_contract_check_count,
+    ) = validate_evals(skill_root)
     require(not cache_snapshot(skill_root), "protocol validation generated Python cache")
     print(
         f"protocol validation passed: {eval_count} eval definitions validated; "
         f"{executable_eval_count} executable routes passed; "
-        "selector tests passed; cache absent"
+        f"{manual_eval_count} static/manual contract cases passed via "
+        f"{static_contract_check_count} file-token checks (not end-to-end behavior); "
+        "selector and contract-validator tests passed; cache absent"
     )
 
 
