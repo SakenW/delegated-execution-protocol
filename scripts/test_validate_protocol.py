@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 from types import ModuleType
 
+from test_profile_fixtures import write_profiles
+
 
 SCRIPT_PATH = Path(__file__).with_name("validate_protocol.py")
 
@@ -77,6 +79,30 @@ class StaticContractCheckTests(unittest.TestCase):
                     ],
                 },
             )
+
+
+class ProfileSafetyTests(unittest.TestCase):
+    def test_read_only_role_cannot_acquire_write_sandbox(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            write_profiles(home)
+            validator = load_validator()
+            validator.fixture_catalog(home / "models_cache.json")
+            profile = home / "agents/delegated_reviewer.toml"
+            profile.write_text(profile.read_text().replace('sandbox_mode = "read-only"', 'sandbox_mode = "danger-full-access"'))
+            with self.assertRaisesRegex(SystemExit, "unsafe sandbox"):
+                validator.validate_profile_safety(home)
+
+    def test_unavailable_configured_model_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            write_profiles(home)
+            validator = load_validator()
+            validator.fixture_catalog(home / "models_cache.json")
+            profile = home / "agents/delegated_reviewer.toml"
+            profile.write_text(profile.read_text().replace('gpt-6-astra', 'unavailable-model'))
+            with self.assertRaisesRegex(SystemExit, "required profile unavailable"):
+                validator.validate_profile_safety(home)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,6 @@
 interface:
   display_name: "委派执行协议"
-  short_description: "保留质量、控制成本并可验证的 GPT-5.6 委派路由"
-  default_prompt: "使用 $delegated-execution-protocol 先执行委派价值门，以 Terra/medium 为主对话默认，再按最低已验证够用原则、worker 预算、分片证据和已验证 transport 路由 Luna、Terra 或 Sol，并由主对话保留最终审查。"
+  short_description: "按任务边界选择低成本角色，核验模型与权限并保留主对话最终判断"
+  default_prompt: "使用 $delegated-execution-protocol 先判断委派收益，再按任务风险与可验证性选择已配置角色，核验派发权限和模型绑定，由主对话验收。"
+policy:
+  allow_implicit_invocation: true

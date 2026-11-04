@@ -13,6 +13,8 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
 
+from test_profile_fixtures import TEST_BINDINGS, binding, write_profiles
+
 
 SCRIPT_PATH = Path(__file__).with_name("select_agent_profile.py")
 
@@ -47,6 +49,8 @@ def args(catalog: Path, **overrides: str) -> argparse.Namespace:
         "transport_preference": "auto",
         "steering_trigger": "none",
         "catalog": catalog,
+        "codex_home": catalog.parent,
+        "native_binding": [binding(catalog.parent, role) for role in TEST_BINDINGS],
     }
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -61,21 +65,25 @@ class SelectorTests(unittest.TestCase):
                 {
                     "models": [
                         {
-                            "slug": "gpt-5.6-sol",
+                            "slug": "gpt-6.1-terra",
+                            "supported_reasoning_levels": [{"effort": "medium"}],
+                        },
+                        {
+                            "slug": "gpt-6-astra",
                             "supported_reasoning_levels": [
                                 {"effort": level}
                                 for level in ("low", "medium", "high", "xhigh")
                             ],
                         },
                         {
-                            "slug": "gpt-5.6-terra",
+                            "slug": "gpt-6.1-sol",
                             "supported_reasoning_levels": [
                                 {"effort": level}
                                 for level in ("low", "medium", "high")
                             ],
                         },
                         {
-                            "slug": "gpt-5.6-luna",
+                            "slug": "gpt-6-luna",
                             "supported_reasoning_levels": [
                                 {"effort": level}
                                 for level in ("low", "medium", "high")
@@ -87,8 +95,52 @@ class SelectorTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+        write_profiles(Path(self.temp_dir.name))
+
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_bounded_computer_task_uses_terra_and_one_session(self) -> None:
+        result = load_selector().select(args(self.catalog, kind="computer-use", requested_workers=2))
+        self.assertEqual(result["agent_name"], "delegated_computer_worker")
+        self.assertEqual(result["model"], "gpt-6.1-terra")
+        self.assertEqual(result["model_reasoning_effort"], "medium")
+        self.assertEqual(result["max_workers"], 1)
+        self.assertTrue(result["bundle_required"])
+        self.assertFalse(result["dispatchable"])
+        self.assertEqual(result["required_capabilities"], ["computer-use", "target-app-access"])
+
+    def test_computer_task_keeps_risk_and_small_task_gates(self) -> None:
+        for override in ({"risk": "high"}, {"ambiguity": "high"}, {"verification": "weak"},
+                         {"sensitivity": "contract-sensitive"}, {"scope": "cross-module"}, {"priority": "quality"}):
+            with self.subTest(override=override):
+                result = load_selector().select(args(self.catalog, kind="computer-use", **override))
+                self.assertEqual(result["agent_name"], "delegated_senior_worker")
+                self.assertEqual(result["max_workers"], 1)
+        result = load_selector().select(args(self.catalog, kind="computer-use", task_size="small", parallel_value="none"))
+        self.assertFalse(result["delegate"])
+
+    def test_computer_use_does_not_claim_read_only_or_batch_luna(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "incompatible kind/writes"):
+            load_selector().select(args(self.catalog, kind="computer-use", writes="none"))
+        result = load_selector().select(args(self.catalog, kind="computer-use", risk="low", verification="strong",
+                                            workload="batch", batch_size=20, sharding_evidence="measured-throughput"))
+        self.assertEqual(result["agent_name"], "delegated_computer_worker")
+        self.assertEqual(result["max_workers"], 1)
+        self.assertFalse(result["sharding_justified"])
+
+    def test_missing_terra_fails_without_model_substitution(self) -> None:
+        data = json.loads(self.catalog.read_text())
+        data["models"] = [m for m in data["models"] if m["slug"] != "gpt-6.1-terra"]
+        self.catalog.write_text(json.dumps(data))
+        with self.assertRaisesRegex(SystemExit, "required profile unavailable"):
+            load_selector().select(args(self.catalog, kind="computer-use"))
+
+    def test_computer_task_uses_approval_capable_fallback(self) -> None:
+        result = load_selector().select(args(self.catalog, kind="computer-use", native_binding=[]))
+        self.assertEqual(result["recommended_transport"], "explicit-codex-app-server")
+        result = load_selector().select(args(self.catalog, kind="computer-use", transport_preference="explicit-cli"))
+        self.assertEqual(result["recommended_transport"], "explicit-codex-app-server")
 
     def test_keeps_trivial_work_in_main_conversation(self) -> None:
         result = load_selector().select(
@@ -184,7 +236,7 @@ class SelectorTests(unittest.TestCase):
         )
         self.assertTrue(result["delegate"])
         self.assertEqual(result["agent_name"], "delegated_standard_reviewer")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
         self.assertEqual(result["cost_gate"], "justified")
 
@@ -223,7 +275,7 @@ class SelectorTests(unittest.TestCase):
         )
         self.assertFalse(result["delegate"])
 
-    def test_batch_size_one_does_not_qualify_for_luna(self) -> None:
+    def test_batch_size_one_uses_focused_explorer_not_batch(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -241,10 +293,10 @@ class SelectorTests(unittest.TestCase):
         )
         self.assertTrue(result["delegate"])
         self.assertEqual(result["agent_name"], "delegated_explorer")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6-luna")
         self.assertTrue(any("below 10" in item for item in result["routing_warnings"]))
 
-    def test_batch_size_nine_does_not_qualify_for_luna(self) -> None:
+    def test_batch_size_nine_uses_focused_explorer_not_batch(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -263,7 +315,7 @@ class SelectorTests(unittest.TestCase):
         )
         self.assertTrue(result["delegate"])
         self.assertEqual(result["agent_name"], "delegated_explorer")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6-luna")
         self.assertTrue(any("below 10" in item for item in result["routing_warnings"]))
 
     def test_batch_threshold_amortizes_cold_start_and_preserves_luna_route(self) -> None:
@@ -366,21 +418,21 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(result["max_workers"], 2)
         self.assertTrue(result["bundle_required"])
 
-    def test_routes_read_only_scan_to_terra_low(self) -> None:
+    def test_routes_read_only_scan_to_luna_high(self) -> None:
         result = load_selector().select(
             args(self.catalog, kind="scan", writes="none", scope="small", risk="low")
         )
         self.assertEqual(result["agent_name"], "delegated_explorer")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
-        self.assertEqual(result["model_reasoning_effort"], "low")
+        self.assertEqual(result["model"], "gpt-6-luna")
+        self.assertEqual(result["model_reasoning_effort"], "high")
 
-    def test_routes_bounded_implementation_to_terra_medium(self) -> None:
+    def test_routes_bounded_implementation_to_sol_medium(self) -> None:
         result = load_selector().select(args(self.catalog))
         self.assertEqual(result["agent_name"], "delegated_worker")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["model_reasoning_effort"], "medium")
 
-    def test_routes_economy_batch_read_only_to_luna_low(self) -> None:
+    def test_routes_economy_batch_read_only_to_luna_high(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -396,10 +448,10 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_batch_explorer")
-        self.assertEqual(result["model"], "gpt-5.6-luna")
-        self.assertEqual(result["model_reasoning_effort"], "low")
+        self.assertEqual(result["model"], "gpt-6-luna")
+        self.assertEqual(result["model_reasoning_effort"], "high")
 
-    def test_routes_economy_batch_write_with_strong_verification_to_luna_medium(self) -> None:
+    def test_routes_economy_batch_write_with_strong_verification_to_luna_high(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -415,10 +467,10 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_batch_worker")
-        self.assertEqual(result["model"], "gpt-5.6-luna")
-        self.assertEqual(result["model_reasoning_effort"], "medium")
+        self.assertEqual(result["model"], "gpt-6-luna")
+        self.assertEqual(result["model_reasoning_effort"], "high")
 
-    def test_economy_one_off_falls_back_to_balanced_terra(self) -> None:
+    def test_economy_one_off_falls_back_to_balanced_sol(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -433,11 +485,11 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_worker")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["effective_priority"], "balanced")
         self.assertTrue(result["routing_warnings"])
 
-    def test_weak_verification_write_escalates_to_sol_high(self) -> None:
+    def test_weak_verification_write_escalates_to_astra_high(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -452,7 +504,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_senior_worker")
-        self.assertEqual(result["model"], "gpt-5.6-sol")
+        self.assertEqual(result["model"], "gpt-6-astra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_economy_batch_write_without_strong_verification_does_not_use_luna(self) -> None:
@@ -470,10 +522,10 @@ class SelectorTests(unittest.TestCase):
                 verification="weak",
             )
         )
-        self.assertNotEqual(result["model"], "gpt-5.6-luna")
+        self.assertNotEqual(result["model"], "gpt-6-luna")
         self.assertEqual(result["effective_priority"], "balanced")
 
-    def test_economy_batch_read_with_weak_verification_reports_gaps_on_terra(self) -> None:
+    def test_economy_batch_read_with_weak_verification_reports_gaps_on_sol(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -489,7 +541,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_researcher")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["model_reasoning_effort"], "medium")
         self.assertTrue(any("read verification is weak" in item for item in result["routing_warnings"]))
         self.assertTrue(any("report evidence gaps" in item for item in result["routing_warnings"]))
@@ -511,9 +563,9 @@ class SelectorTests(unittest.TestCase):
                 steering_trigger="partial-results",
             )
         )
-        self.assertEqual(result["agent_name"], "delegated_explorer")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
-        self.assertEqual(result["model_reasoning_effort"], "low")
+        self.assertEqual(result["agent_name"], "delegated_researcher")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model_reasoning_effort"], "medium")
         self.assertEqual(result["recommended_transport"], "native-named-agent")
         self.assertEqual(result["effective_priority"], "balanced")
         self.assertTrue(result["routing_warnings"])
@@ -575,31 +627,14 @@ class SelectorTests(unittest.TestCase):
                 self.assertEqual(result["transport_preference"], preference)
                 self.assertEqual(result["recommended_transport"], transport)
 
-    def test_missing_luna_catalog_falls_back_to_matching_terra_profile(self) -> None:
-        catalog = Path(self.temp_dir.name) / "models_without_luna.json"
-        data = json.loads(self.catalog.read_text(encoding="utf-8"))
-        data["models"] = [
-            item for item in data["models"] if item["slug"] != "gpt-5.6-luna"
-        ]
-        catalog.write_text(json.dumps(data), encoding="utf-8")
-
-        result = load_selector().select(
-            args(
-                catalog,
-                kind="scan",
-                writes="none",
-                scope="medium",
-                risk="low",
-                ambiguity="low",
-                priority="economy",
-                workload="batch",
-                batch_size=10,
-            )
-        )
-        self.assertEqual(result["agent_name"], "delegated_explorer")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
-        self.assertEqual(result["effective_priority"], "balanced")
-        self.assertTrue(result["routing_warnings"])
+    def test_missing_luna_catalog_never_switches_model(self) -> None:
+        data = json.loads(self.catalog.read_text())
+        data["models"] = [x for x in data["models"] if x["slug"] != "gpt-6-luna"]
+        self.catalog.write_text(json.dumps(data))
+        with self.assertRaisesRegex(SystemExit, "required profile unavailable: gpt-6-luna/high"):
+            load_selector().select(args(self.catalog, kind="scan", writes="none",
+                                       scope="medium", risk="low", ambiguity="low",
+                                       workload="batch", batch_size=10))
 
     def test_missing_catalog_fails_closed(self) -> None:
         with self.assertRaises(SystemExit):
@@ -614,14 +649,14 @@ class SelectorTests(unittest.TestCase):
                 )
             )
 
-    def test_luna_write_fallback_fails_when_terra_medium_is_unavailable(self) -> None:
-        catalog = Path(self.temp_dir.name) / "no_luna_or_terra_medium.json"
+    def test_missing_luna_write_fails_without_using_sol(self) -> None:
+        catalog = Path(self.temp_dir.name) / "no_luna_or_sol_medium.json"
         data = json.loads(self.catalog.read_text(encoding="utf-8"))
         data["models"] = [
-            item for item in data["models"] if item["slug"] != "gpt-5.6-luna"
+            item for item in data["models"] if item["slug"] != "gpt-6-luna"
         ]
         for item in data["models"]:
-            if item["slug"] == "gpt-5.6-terra":
+            if item["slug"] == "gpt-6.1-sol":
                 item["supported_reasoning_levels"] = [{"effort": "low"}]
         catalog.write_text(json.dumps(data), encoding="utf-8")
 
@@ -641,7 +676,7 @@ class SelectorTests(unittest.TestCase):
                 )
             )
 
-    def test_routes_balanced_medium_ambiguity_read_only_to_terra_medium(self) -> None:
+    def test_routes_balanced_medium_ambiguity_read_only_to_sol_medium(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -653,10 +688,10 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_researcher")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["model_reasoning_effort"], "medium")
 
-    def test_routes_high_ambiguity_low_risk_research_to_terra_high(self) -> None:
+    def test_routes_high_ambiguity_low_risk_research_to_sol_high(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -669,10 +704,10 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_deep_researcher")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
-    def test_routes_steerable_high_ambiguity_research_to_terra_high(self) -> None:
+    def test_routes_steerable_high_ambiguity_research_to_sol_high(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -687,11 +722,11 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_deep_researcher")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
         self.assertEqual(result["recommended_transport"], "native-named-agent")
 
-    def test_routes_strongly_verified_complex_bounded_write_to_terra_high(self) -> None:
+    def test_routes_strongly_verified_complex_bounded_write_to_sol_high(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -704,10 +739,10 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_complex_worker")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
-    def test_routes_steerable_complex_bounded_write_to_terra_high(self) -> None:
+    def test_routes_steerable_complex_bounded_write_to_sol_high(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -722,7 +757,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_complex_worker")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
         self.assertEqual(result["recommended_transport"], "native-named-agent")
 
@@ -741,7 +776,8 @@ class SelectorTests(unittest.TestCase):
                     result = load_selector().select(
                         args(self.catalog, kind=kind, writes=writes)
                     )
-                    self.assertNotIn("dispatchable", result)
+                    self.assertFalse(result["dispatchable"])
+                    self.assertTrue(result["preflight_required"])
         for kind in ("review", "planning-audit", "arbitration"):
             result = load_selector().select(
                 args(self.catalog, kind=kind, writes="none")
@@ -755,7 +791,7 @@ class SelectorTests(unittest.TestCase):
                     self.assertTrue(result["split_required"])
                     self.assertFalse(result["dispatchable"])
 
-    def test_quality_priority_routes_low_risk_read_only_to_sol_high(self) -> None:
+    def test_quality_priority_routes_low_risk_read_only_to_astra_high(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -768,10 +804,10 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_reviewer")
-        self.assertEqual(result["model"], "gpt-5.6-sol")
+        self.assertEqual(result["model"], "gpt-6-astra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
-    def test_routes_serious_review_to_sol_high(self) -> None:
+    def test_routes_serious_review_to_astra_high(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -782,7 +818,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_reviewer")
-        self.assertEqual(result["model"], "gpt-5.6-sol")
+        self.assertEqual(result["model"], "gpt-6-astra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_routes_bounded_low_risk_review_to_standard_reviewer(self) -> None:
@@ -799,10 +835,10 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_standard_reviewer")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
-    def test_contract_sensitive_review_routes_to_sol_high(self) -> None:
+    def test_contract_sensitive_review_routes_to_astra_high(self) -> None:
         result = load_selector().select(
             args(
                 self.catalog,
@@ -817,7 +853,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_reviewer")
-        self.assertEqual(result["model"], "gpt-5.6-sol")
+        self.assertEqual(result["model"], "gpt-6-astra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_routes_high_risk_read_only_scan_to_reviewer(self) -> None:
@@ -879,6 +915,8 @@ class SelectorTests(unittest.TestCase):
             "delegated_planning_auditor",
         }
         for kind in load_selector().KINDS:
+            if "none" not in load_selector().ALLOWED_WRITES_BY_KIND[kind]:
+                continue
             for scope in load_selector().SCOPES:
                 for risk in load_selector().LEVELS:
                     for ambiguity in load_selector().AMBIGUITIES:
@@ -951,7 +989,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_senior_worker")
-        self.assertEqual(result["model"], "gpt-5.6-sol")
+        self.assertEqual(result["model"], "gpt-6-astra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_routes_non_xhigh_bounded_planning_audit_to_standard_reviewer(self) -> None:
@@ -966,7 +1004,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_standard_reviewer")
-        self.assertEqual(result["model"], "gpt-5.6-terra")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_uses_xhigh_only_for_high_impact_high_ambiguity_audit(self) -> None:
@@ -981,17 +1019,128 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_planning_auditor")
-        self.assertEqual(result["model"], "gpt-5.6-sol")
+        self.assertEqual(result["model"], "gpt-6-astra")
         self.assertEqual(result["model_reasoning_effort"], "xhigh")
+
+    def test_model_and_effort_come_from_role_config_for_any_provider(self) -> None:
+        profile = Path(self.temp_dir.name) / "agents/delegated_reviewer.toml"
+        profile.write_text(profile.read_text().replace('gpt-6-astra', 'vendor/custom-review').replace('"high"', '"medium"'))
+        data = json.loads(self.catalog.read_text())
+        data["models"].append({"slug": "vendor/custom-review", "supported_reasoning_levels": [{"effort": "medium"}]})
+        self.catalog.write_text(json.dumps(data))
+        result = load_selector().select(args(self.catalog, kind="review", writes="none", risk="high"))
+        self.assertEqual((result["model"], result["model_reasoning_effort"]), ("vendor/custom-review", "medium"))
+        self.assertEqual(result["sandbox_mode"], "read-only")
+
+    def test_codex_home_and_configured_catalog_are_respected(self) -> None:
+        home = Path(self.temp_dir.name)
+        special = home / "custom-models.json"
+        special.write_bytes(self.catalog.read_bytes())
+        self.catalog.unlink()
+        (home / "config.toml").write_text('model_catalog_json = "custom-models.json"\n')
+        with patch.dict("os.environ", {"CODEX_HOME": str(home)}):
+            candidate = args(self.catalog, codex_home=None)
+            candidate.catalog = None
+            result = load_selector().select(candidate)
+        self.assertEqual(result["agent_name"], "delegated_worker")
+
+    def test_registered_config_file_overrides_standalone_path(self) -> None:
+        home = Path(self.temp_dir.name)
+        original = home / "agents/delegated_worker.toml"
+        alternate = home / "worker-profile.toml"
+        alternate.write_bytes(original.read_bytes())
+        original.unlink()
+        (home / "config.toml").write_text('[agents.delegated_worker]\nconfig_file = "worker-profile.toml"\n')
+        result = load_selector().select(args(self.catalog))
+        self.assertEqual(result["config_file"], str(alternate.resolve()))
+
+    def test_missing_astra_does_not_silently_fall_back_to_sol(self) -> None:
+        data = json.loads(self.catalog.read_text())
+        data["models"] = [x for x in data["models"] if x["slug"] != "gpt-6-astra"]
+        data["models"].append({"slug": "gpt-5.6-sol", "supported_reasoning_levels": [{"effort": "high"}]})
+        self.catalog.write_text(json.dumps(data))
+        with self.assertRaisesRegex(SystemExit, "required profile unavailable: gpt-6-astra/high"):
+            load_selector().select(args(self.catalog, kind="review", writes="none", risk="high"))
+
+    def test_unavailable_effort_fails_closed(self) -> None:
+        profile = Path(self.temp_dir.name) / "agents/delegated_worker.toml"
+        profile.write_text(profile.read_text().replace('"medium"', '"unavailable"'))
+        with self.assertRaisesRegex(SystemExit, "required profile unavailable"):
+            load_selector().select(args(self.catalog))
+
+    def test_read_only_profile_cannot_broaden_permissions(self) -> None:
+        profile = Path(self.temp_dir.name) / "agents/delegated_reviewer.toml"
+        profile.write_text(profile.read_text().replace('"read-only"', '"workspace-write"'))
+        with self.assertRaisesRegex(SystemExit, "unsafe sandbox"):
+            load_selector().select(args(self.catalog, kind="review", writes="none", risk="high"))
+
+    def test_missing_profile_is_not_replaced_by_parent_defaults(self) -> None:
+        (Path(self.temp_dir.name) / "agents/delegated_worker.toml").unlink()
+        with self.assertRaisesRegex(SystemExit, "cannot read configuration"):
+            load_selector().select(args(self.catalog))
+
+    def test_auto_uses_cli_until_native_binding_is_verified(self) -> None:
+        result = load_selector().select(args(self.catalog, native_binding=[]))
+        self.assertEqual(result["recommended_transport"], "explicit-codex-cli")
+
+    def test_explicit_native_and_steerable_need_current_evidence(self) -> None:
+        for overrides in [
+            {"transport_preference": "native-verified"},
+            {"coordination": "steerable", "steering_trigger": "partial-results"},
+        ]:
+            with self.subTest(overrides=overrides), self.assertRaises(SystemExit):
+                load_selector().select(args(self.catalog, native_binding=[], **overrides))
+
+    def test_native_permission_mismatch_falls_back_to_read_only_cli(self) -> None:
+        evidence = binding(Path(self.temp_dir.name), "delegated_reviewer")
+        evidence["sandbox_mode"] = "workspace-write"
+        result = load_selector().select(args(self.catalog, kind="review", writes="none", risk="high", native_binding=[evidence]))
+        self.assertEqual(result["sandbox_mode"], "read-only")
+        self.assertEqual(result["recommended_transport"], "explicit-codex-cli")
+
+    def test_stale_native_model_or_effort_does_not_count_as_binding(self) -> None:
+        for key, value in [("model", "gpt-5.6-sol"), ("model_reasoning_effort", "low")]:
+            evidence = binding(Path(self.temp_dir.name), "delegated_reviewer")
+            evidence[key] = value
+            with self.subTest(key=key):
+                result = load_selector().select(args(self.catalog, kind="review", writes="none", risk="high", native_binding=[evidence]))
+                self.assertEqual(result["recommended_transport"], "explicit-codex-cli")
+
+
+    def test_medium_risk_scan_does_not_use_focused_luna(self) -> None:
+        result = load_selector().select(args(self.catalog, kind="scan", writes="none",
+                                             scope="small", risk="medium"))
+        self.assertEqual(result["agent_name"], "delegated_researcher")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
+
+    def test_missing_focused_luna_does_not_use_sol_researcher(self) -> None:
+        data = json.loads(self.catalog.read_text())
+        data["models"] = [x for x in data["models"] if x["slug"] != "gpt-6-luna"]
+        self.catalog.write_text(json.dumps(data))
+        with self.assertRaisesRegex(SystemExit, "required profile unavailable: gpt-6-luna/high"):
+            load_selector().select(args(self.catalog, kind="scan", writes="none",
+                                       scope="small", risk="low"))
+
+    def test_missing_sol_does_not_revert_to_legacy_model(self) -> None:
+        data = json.loads(self.catalog.read_text())
+        data["models"] = [x for x in data["models"] if x["slug"] != "gpt-6.1-sol"]
+        data["models"].append({"slug": "gpt-6-sol",
+                              "supported_reasoning_levels": [{"effort": "medium"}]})
+        self.catalog.write_text(json.dumps(data))
+        with self.assertRaisesRegex(SystemExit, "required profile unavailable: gpt-6.1-sol/medium"):
+            load_selector().select(args(self.catalog))
 
     def test_exhaustive_routing_invariants(self) -> None:
         module = load_selector()
         module.resolve_catalog = lambda _path, model, effort: (model, effort, None)
+        module.load_binding = binding
+        module.catalog_path = lambda _home, explicit: explicit
         write_profiles = {
             "delegated_batch_worker",
             "delegated_worker",
             "delegated_complex_worker",
             "delegated_senior_worker",
+            "delegated_computer_worker",
         }
         violations: list[str] = []
 
@@ -1069,7 +1218,7 @@ class SelectorTests(unittest.TestCase):
             if writes == "none" and agent in write_profiles:
                 violations.append(f"read-only got write profile: {label}")
 
-            if model == "gpt-5.6-luna":
+            if model == "gpt-6-luna":
                 luna_read = (
                     priority == "economy"
                     and workload == "batch"
@@ -1095,13 +1244,25 @@ class SelectorTests(unittest.TestCase):
                     and sensitivity == "none"
                     and kind in {"documentation", "implementation"}
                 )
-                if not (luna_read or luna_write) or effort not in {"low", "medium"}:
+                luna_focused_read = (
+                    agent == "delegated_explorer"
+                    and writes == "none"
+                    and scope != "cross-module"
+                    and risk == "low"
+                    and ambiguity == "low"
+                    and verification in {"normal", "strong"}
+                    and sensitivity == "none"
+                    and coordination == "isolated"
+                    and priority != "quality"
+                    and kind not in {"review", "planning-audit", "arbitration"}
+                )
+                if not (luna_read or luna_write or luna_focused_read) or effort != "high":
                     violations.append(f"unsafe Luna: {label}")
 
             if (
-                module.can_use_luna_read(candidate)
-                or module.can_use_luna_write(candidate)
-            ) and model != "gpt-5.6-luna":
+                module.can_use_batch_read(candidate)
+                or module.can_use_batch_write(candidate)
+            ) and model != "gpt-6-luna":
                 violations.append(f"non-minimal route skipped Luna: {label}")
 
             if coordination == "steerable" and (
@@ -1109,8 +1270,8 @@ class SelectorTests(unittest.TestCase):
                 or result["transport_preference"] != "auto"
             ):
                 violations.append(f"steerable transport mismatch: {label}")
-            if priority == "quality" and coordination == "isolated" and model != "gpt-5.6-sol":
-                violations.append(f"quality did not use Sol: {label}")
+            if priority == "quality" and coordination == "isolated" and model != "gpt-6-astra":
+                violations.append(f"quality did not use configured high-capability role: {label}")
 
         self.assertEqual(violations[:10], [], f"routing invariant failures: {len(violations)}")
 

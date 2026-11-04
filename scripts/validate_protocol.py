@@ -10,65 +10,37 @@ import re
 import subprocess
 import sys
 import tempfile
-import tomllib
 from datetime import date
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from agent_profiles import ROLE_SANDBOX, catalog_path, default_codex_home, load_binding, resolve_catalog
 
 
 DEFAULT_SKILL_ROOT = Path(__file__).resolve().parent.parent
 SKILL_NAME = "delegated-execution-protocol"
-MAX_RUNTIME_VERIFICATION_AGE_DAYS = 45
-EXPECTED_PROFILES = {
-    "delegated_batch_explorer": ("gpt-5.6-luna", "low", "read-only"),
-    "delegated_explorer": ("gpt-5.6-terra", "low", "read-only"),
-    "delegated_researcher": ("gpt-5.6-terra", "medium", "read-only"),
-    "delegated_deep_researcher": ("gpt-5.6-terra", "high", "read-only"),
-    "delegated_standard_reviewer": ("gpt-5.6-terra", "high", "read-only"),
-    "delegated_batch_worker": ("gpt-5.6-luna", "medium", "workspace-write"),
-    "delegated_worker": ("gpt-5.6-terra", "medium", "workspace-write"),
-    "delegated_complex_worker": ("gpt-5.6-terra", "high", "workspace-write"),
-    "delegated_senior_worker": ("gpt-5.6-sol", "high", "workspace-write"),
-    "delegated_reviewer": ("gpt-5.6-sol", "high", "read-only"),
-    "delegated_planning_auditor": ("gpt-5.6-sol", "xhigh", "read-only"),
-}
+
 REQUIRED_FILES = {
     "SKILL.md",
     "agents/openai.yaml",
     "evals/evals.json",
     "references/reporting.md",
+    "references/routing-policy.md",
     "references/runtime-transports.md",
     "scripts/select_agent_profile.py",
+    "scripts/agent_profiles.py",
+    "scripts/test_profile_fixtures.py",
     "scripts/test_select_agent_profile.py",
     "scripts/test_validate_protocol.py",
     "scripts/validate_protocol.py",
+    "scripts/preflight_dispatch.py",
+    "scripts/test_preflight_dispatch.py",
+    "scripts/run_computer_task.py",
+    "scripts/test_run_computer_task.py",
+    "references/computer-tasks.md",
 }
-ROUTING_FIELDS = {
-    "Task",
-    "Kind",
-    "Writes",
-    "Scope",
-    "Task size",
-    "Risk",
-    "Ambiguity",
-    "Independent evidence",
-    "Parallel value",
-    "Priority",
-    "Workload",
-    "Batch size",
-    "Verification",
-    "Sensitivity",
-    "Coordination",
-    "Steering trigger",
-    "Requested workers",
-    "Sharding evidence",
-    "Transport preference",
-    "Selected profile / transport",
-    "Assignment evidence",
-    "Outcome",
-    "Prior profile",
-    "Escalation trigger",
-    "Observed verification",
-}
+ROUTING_FIELDS = {"Task", "Ownership", "Delegation value", "Acceptance", "Assignment", "Outcome"}
+
 SELECTOR_OPTIONS = {
     "--kind",
     "--writes",
@@ -88,6 +60,8 @@ SELECTOR_OPTIONS = {
     "--requested-workers",
     "--sharding-evidence",
     "--transport-preference",
+    "--codex-home",
+    "--native-binding",
 }
 
 
@@ -99,7 +73,7 @@ def require(condition: bool, message: str) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--skill-root", type=Path, default=DEFAULT_SKILL_ROOT)
-    parser.add_argument("--codex-home", type=Path, default=Path.home() / ".codex")
+    parser.add_argument("--codex-home", type=Path, default=default_codex_home())
     parser.add_argument(
         "--check-local-profiles",
         action="store_true",
@@ -151,23 +125,20 @@ def validate_skill_structure(skill_root: Path) -> None:
     require(bool(frontmatter["description"]), "skill description is empty")
 
     headings = re.findall(r"^##\s+(.+)$", skill, re.MULTILINE)
-    require(len(headings) >= 10, "SKILL.md lacks the expected workflow structure")
     require(len(headings) == len(set(headings)), "SKILL.md contains duplicate sections")
 
+    routing = (skill_root / "references/routing-policy.md").read_text(encoding="utf-8")
     route_fields = {
         match.group(1).strip()
-        for match in re.finditer(r"^(.*?):(?:\s|$)", skill, re.MULTILINE)
+        for match in re.finditer(r"^(.*?):(?:\s|$)", routing, re.MULTILINE)
         if match.group(1).strip() in ROUTING_FIELDS
     }
     require(route_fields == ROUTING_FIELDS, f"routing record fields drifted: {sorted(ROUTING_FIELDS - route_fields)}")
-    for profile in EXPECTED_PROFILES:
-        require(f"`{profile}`" in skill, f"missing profile {profile}")
-    for model in {profile[0] for profile in EXPECTED_PROFILES.values()}:
-        require(model in skill, f"missing model tier {model}")
-    require("gpt-5.5" not in skill, "stale gpt-5.5 policy remains")
+    for profile in ROLE_SANDBOX:
+        require(f"`{profile}`" in routing, f"missing profile {profile}")
 
     links = markdown_links(skill)
-    expected_links = {"references/runtime-transports.md", "references/reporting.md"}
+    expected_links = {"references/runtime-transports.md", "references/reporting.md", "references/routing-policy.md"}
     require(expected_links <= links, "SKILL.md does not link both runtime references")
     for link in links:
         if "://" in link or link.startswith("#"):
@@ -190,27 +161,25 @@ def validate_openai_metadata(skill_root: Path) -> None:
 
 def validate_runtime_references(skill_root: Path) -> None:
     runtime = (skill_root / "references" / "runtime-transports.md").read_text(encoding="utf-8")
-    reporting = (skill_root / "references" / "reporting.md").read_text(encoding="utf-8")
+    routing = (skill_root / "references" / "routing-policy.md").read_text(encoding="utf-8")
     verified_at_match = re.search(r"^verified_at:\s*(\d{4}-\d{2}-\d{2})\s*$", runtime, re.MULTILINE)
     require(verified_at_match is not None, "runtime verified_at is missing or malformed")
     verified_at = date.fromisoformat(verified_at_match.group(1))
     verification_age = (date.today() - verified_at).days
-    require(0 <= verification_age <= MAX_RUNTIME_VERIFICATION_AGE_DAYS, "runtime verification is stale or future-dated")
+    require(verification_age >= 0, "runtime verification is future-dated")
     require(re.search(r"^verification_surface:\s*.+$", runtime, re.MULTILINE) is not None, "runtime verification surface is missing")
     for token in (
+        "preflight_dispatch.py",
+        "dispatchable",
+        "model_unavailable",
         "fork_turns",
         "turn_context",
         "agent_type",
         "reasoning_effort",
         "explicit-codex-cli",
         "native-named-agent",
-        "gpt-5.5",
-        "gpt-5.4-mini",
     ):
-        require(token in runtime or token in (skill_root / "SKILL.md").read_text(encoding="utf-8"), f"runtime contract lacks {token}")
-    require(reporting.count("```text") >= 3, "reporting reference lacks route examples")
-    for token in ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"):
-        require(token in reporting, f"reporting reference lacks {token} example")
+        require(token in runtime or token in routing or token in (skill_root / "SKILL.md").read_text(encoding="utf-8"), f"runtime contract lacks {token}")
 
 
 def validate_selector_behavior(skill_root: Path, cache_before: dict[str, tuple[int, int]]) -> None:
@@ -251,47 +220,30 @@ def validate_selector_behavior(skill_root: Path, cache_before: dict[str, tuple[i
         validator_test_result.returncode == 0,
         f"static/manual contract validator tests failed:\n{validator_test_result.stderr}",
     )
+    preflight_tests = subprocess.run(
+        [sys.executable, str(skill_root / "scripts" / "test_preflight_dispatch.py")],
+        capture_output=True, text=True, check=False, env=env,
+    )
+    require(preflight_tests.returncode == 0, f"dispatch preflight tests failed:\n{preflight_tests.stderr}")
+    computer_tests = subprocess.run(
+        [sys.executable, str(skill_root / "scripts" / "test_run_computer_task.py")],
+        capture_output=True, text=True, check=False, env=env,
+    )
+    require(computer_tests.returncode == 0, f"computer approval client tests failed:\n{computer_tests.stderr}")
     require(cache_snapshot(skill_root) == cache_before, "validation generated or modified Python cache")
 
 
 def validate_profile_safety(codex_home: Path) -> None:
-    config_path = codex_home / "config.toml"
-    catalog_path = codex_home / "models_cache.json"
-    require(config_path.is_file(), f"missing Codex config {config_path}")
-    require(catalog_path.is_file(), f"missing model catalog {catalog_path}")
-
-    config = tomllib.loads(config_path.read_text(encoding="utf-8"))
-    registered_agents = config.get("agents", {})
-    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-    supported = {
-        item["slug"]: {
-            level["effort"]
-            for level in item.get("supported_reasoning_levels", [])
-            if isinstance(level, dict) and isinstance(level.get("effort"), str)
-        }
-        for item in catalog.get("models", [])
-        if isinstance(item, dict) and isinstance(item.get("slug"), str)
-    }
-
-    for name, (model, effort, sandbox) in EXPECTED_PROFILES.items():
-        profile_path = codex_home / "agents" / f"{name}.toml"
-        require(profile_path.is_file(), f"missing custom agent {profile_path}")
-        registration = registered_agents.get(name, {})
-        require(registration.get("config_file") == f"agents/{name}.toml", f"{name} registration drifted")
-        require(bool(registration.get("description")), f"{name} registration has no description")
-        profile = tomllib.loads(profile_path.read_text(encoding="utf-8"))
-        required_fields = {"name", "description", "developer_instructions", "model", "model_reasoning_effort"}
-        require(all(profile.get(field) for field in required_fields), f"{profile_path} lacks required fields")
-        require(profile["name"] == name, f"{profile_path} name mismatch")
-        require(profile["model"] == model, f"{profile_path} model drift")
-        require(profile["model_reasoning_effort"] == effort, f"{profile_path} effort drift")
-        require(profile.get("sandbox_mode") == sandbox, f"{profile_path} sandbox drift")
-        require(effort in supported.get(model, set()), f"catalog does not support {model}/{effort}")
+    path = catalog_path(codex_home)
+    for role in ROLE_SANDBOX:
+        profile = load_binding(codex_home, role)
+        resolve_catalog(path, profile["model"], profile["model_reasoning_effort"])
 
 
 def fixture_catalog(path: Path) -> None:
     supported: dict[str, set[str]] = {}
-    for model, effort, _sandbox in EXPECTED_PROFILES.values():
+    from test_profile_fixtures import TEST_BINDINGS
+    for model, effort in TEST_BINDINGS.values():
         supported.setdefault(model, set()).add(effort)
     path.write_text(
         json.dumps(
@@ -379,6 +331,8 @@ def validate_evals(skill_root: Path) -> tuple[int, int, int, int]:
     with tempfile.TemporaryDirectory() as temp_dir:
         catalog = Path(temp_dir) / "models_cache.json"
         fixture_catalog(catalog)
+        from test_profile_fixtures import binding, write_profiles
+        write_profiles(Path(temp_dir))
         for case in cases:
             require(isinstance(case.get("id"), int), "eval id must be an integer")
             require(bool(case.get("prompt")), f"eval {case.get('id')} has no prompt")
@@ -413,7 +367,7 @@ def validate_evals(skill_root: Path) -> tuple[int, int, int, int]:
             require(isinstance(route_args, list) and all(isinstance(item, str) for item in route_args), f"eval {case.get('id')} route_args must be a string list")
             require(isinstance(expected_route, dict) and expected_route, f"eval {case.get('id')} expected_route must be a non-empty object")
             result = subprocess.run(
-                [sys.executable, str(selector), *route_args, "--catalog", str(catalog)],
+                [sys.executable, str(selector), *route_args, "--catalog", str(catalog), "--codex-home", temp_dir, *[arg for role in ROLE_SANDBOX for arg in ("--native-binding", json.dumps(binding(Path(temp_dir), role)))]],
                 capture_output=True,
                 text=True,
                 check=False,

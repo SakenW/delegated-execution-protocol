@@ -1,44 +1,10 @@
-# 汇报与委派包
+# 委派汇报
 
-只有委派路由、运行时 profile 或生命周期状态对用户重要时才读取本参考。
+只汇报对用户有用的路由、阻塞或结果。先说明已成功指派的工作或仍由主线程处理的工作，不把参数接受写成实际模型已执行。实际配置以运行时元数据为准。
 
-## 紧凑路由表
+派发记录保留任务、角色/config_file、请求的 model/effort/权限/transport，以及后续运行时证据。不复制完整规则、模型目录或原始日志。
 
-存在多个 profile 时，报告 task、实际 model/effort、transport 和 steering trigger。若所有 child 都继承 Sol/high，不得称为差异化路由。
+结束后给出 accepted / escalate-one-tier / main-reclaim、验证结果、未覆盖项与必要的升级原因。缺模型/权限/有效 transport 时说明具体缺口；不要在未执行时声称已委派或模型已回退。
 
-## 中文措辞
 
-原生 steerable 协作：
-
-```text
-已成功指派 2 个协作任务，分别负责 A、B；A 请求 gpt-5.6-terra / medium，B 请求 gpt-5.6-sol / high，本轮保留 follow-up/interrupt 是因为需要动态纠偏。实际配置以运行时元数据为准。
-```
-
-差异化 isolated worker：
-
-```text
-已成功指派 2 个隔离任务：A 使用 gpt-5.6-terra / low，B 使用 gpt-5.6-luna / medium；两项均通过 rollout 元数据验证实际配置。
-```
-
-Stage 0 拒绝：
-
-```text
-该任务留在主对话执行：工作量不足以抵消独立 worker 的冷启动成本，也不需要独立证据或隔离。
-```
-
-## 紧凑委派包
-
-```text
-Task: <单一目标>
-Context: <已验证事实与相关路径>
-Ownership: <may edit / must not edit>
-Profile: <agent, model/effort, transport, required evidence>
-Constraints: <context mode, commands, safety boundary>
-Output: <changed files, validation, evidence, residual risk>
-Outcome: <accepted | escalate-one-tier | main-reclaim>
-Prior profile: <none or previous profile>
-Escalation trigger: <objective failure, evidence gap, risk/scope/contract change, or none>
-Observed verification: <command/result or explicit unverified gap>
-```
-
-不要粘贴完整规则文件、Skill 正文、Brain 页面或主对话推理。
+失败时分别记录配置检查、启动参数检查、模型请求与任务完成状态。只有 exec 参数解析实际拒绝才写“CLI 不支持该参数”。服务端 `model ... not supported ... ChatGPT account` 写“当前 CLI 账户/provider 不接受配置模型”，保留配置 model/effort/provider、错误类别、HTTP 状态（原始错误提供时）和工作盘证据路径。认证、网络、额度、超时和未知失败各自说明；MCP 握手告警不覆盖结构化模型错误。探针成功仅证明本次请求可用，任务结果仍须单独验收；未完成的研究不计独立证据。

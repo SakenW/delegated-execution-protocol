@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
-"""Select a GPT-5.6 delegated-agent profile from observable task properties."""
+"""Select a role from task properties, then resolve its configured model and permissions."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from agent_profiles import catalog_path, default_codex_home, load_binding, resolve_catalog
 
-KINDS = ("scan", "documentation", "implementation", "review", "planning-audit", "arbitration")
+
+KINDS = ("scan", "documentation", "implementation", "computer-use", "review", "planning-audit", "arbitration")
 WRITES = ("none", "bounded", "broad")
 ALLOWED_WRITES_BY_KIND = {
     "scan": frozenset({"none"}),
     "documentation": frozenset(WRITES),
     "implementation": frozenset(WRITES),
+    # Interactive navigation changes application state, even without editing files.
+    "computer-use": frozenset({"bounded"}),
     "review": frozenset(WRITES),
     "planning-audit": frozenset(WRITES),
     "arbitration": frozenset(WRITES),
@@ -85,8 +91,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--catalog",
         type=Path,
-        default=Path.home() / ".codex" / "models_cache.json",
+        default=None,
     )
+    parser.add_argument("--codex-home", type=Path, default=default_codex_home())
+    parser.add_argument("--native-binding", type=json.loads, action="append", default=[], help="Observed native binding JSON: agent_name, model, model_reasoning_effort, sandbox_mode; repeat per role")
     return parser.parse_args()
 
 
@@ -100,7 +108,8 @@ def positive_int(value: str) -> int:
 def select(args: argparse.Namespace) -> dict[str, Any]:
     if args.writes not in ALLOWED_WRITES_BY_KIND.get(args.kind, frozenset()):
         raise SystemExit(
-            f"incompatible kind/writes combination: {args.kind} requires writes=none"
+            f"incompatible kind/writes combination: {args.kind} allows writes="
+            + ",".join(sorted(ALLOWED_WRITES_BY_KIND.get(args.kind, ())))
         )
     if args.coordination == "steerable" and args.steering_trigger == "none":
         raise SystemExit(
@@ -162,32 +171,32 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
     if args.kind in {"review", "planning-audit", "arbitration"} and args.writes != "none":
         review_profile = review_profile_for(args)
         worker_profile = (
-            ("delegated_senior_worker", "gpt-5.6-sol", "high")
+            "delegated_senior_worker"
             if high_impact or broad or weak_verification or contract_sensitive or requested_priority == "quality"
-            else ("delegated_worker", "gpt-5.6-terra", "medium")
+            else "delegated_worker"
         )
         if requested_priority == "economy":
             routing_warnings.append(
                 "economy ignored: review/write hybrids require a read-only review before execution"
             )
         steps = []
-        for index, (agent_name, model, effort) in enumerate((review_profile, worker_profile)):
-            logical_agent_name = agent_name
-            recommended_transport = isolated_transport_for(args.transport_preference)
-            resolved_model, resolved_effort, substitution = resolve_catalog(
-                args.catalog, model, effort
-            )
+        for index, role in enumerate((review_profile, worker_profile)):
+            logical_agent_name = role
+            binding, substitution = resolve_role(args, role)
+            agent_name = binding["agent_name"]
+            recommended_transport = transport_for(args, binding)
             steps.append(
                 {
                     "delegate": True,
                     "requires_main_acceptance": index == 1,
                     "agent_name": agent_name,
                     "logical_agent_name": logical_agent_name,
-                    "model": resolved_model,
-                    "model_reasoning_effort": resolved_effort,
+                    **binding,
                     "catalog_substitution": substitution,
                     "recommended_transport": recommended_transport,
                     "transport_enforced": True,
+                    "preflight_required": True,
+                    "dispatchable": False,
                     "transport_preference": args.transport_preference,
                 }
             )
@@ -207,47 +216,56 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
             "routing_warnings": routing_warnings,
             "recommended_transport": "sequential-per-step",
             "transport_enforced": True,
+            "preflight_required": True,
             "transport_preference": args.transport_preference,
             "cost_gate": "justified",
             **worker_budget,
         }
 
     if args.kind in {"planning-audit", "arbitration"} and high_impact and high_ambiguity:
-        profile = ("delegated_planning_auditor", "gpt-5.6-sol", "xhigh")
+        profile = "delegated_planning_auditor"
         reason = "high-impact and high-ambiguity planning or arbitration"
         effective_priority = "quality"
     elif requested_priority == "quality":
         if args.writes == "none":
-            profile = ("delegated_reviewer", "gpt-5.6-sol", "high")
+            profile = "delegated_reviewer"
             reason = "quality-priority read-only work"
         else:
-            profile = ("delegated_senior_worker", "gpt-5.6-sol", "high")
+            profile = "delegated_senior_worker"
             reason = "quality-priority execution"
         effective_priority = "quality"
-    elif can_use_luna_read(args):
-        profile = ("delegated_batch_explorer", "gpt-5.6-luna", "low")
+    elif args.kind == "computer-use":
+        profile = (
+            "delegated_senior_worker"
+            if high_impact or broad or weak_verification or contract_sensitive or high_ambiguity
+            else "delegated_computer_worker"
+        )
+        reason = "difficult computer workflow" if profile == "delegated_senior_worker" else "bounded visual computer operation"
+        effective_priority = "balanced"
+    elif can_use_batch_read(args):
+        profile = "delegated_batch_explorer"
         reason = "economy-priority repetitive read-only work"
         effective_priority = "economy"
-    elif can_use_luna_write(args):
-        profile = ("delegated_batch_worker", "gpt-5.6-luna", "medium")
+    elif can_use_batch_write(args):
+        profile = "delegated_batch_worker"
         reason = "economy-priority repetitive bounded work with strong verification"
         effective_priority = "economy"
     else:
         if requested_priority == "economy":
-            routing_warnings.append(luna_rejection_reason(args))
+            routing_warnings.append(batch_rejection_reason(args))
         effective_priority = "balanced"
 
         if args.writes == "none" and args.kind in {"review", "planning-audit", "arbitration"}:
             profile = review_profile_for(args)
-            if profile[0] == "delegated_standard_reviewer":
+            if profile == "delegated_standard_reviewer":
                 reason = "bounded low- or medium-risk review with verifiable evidence"
             else:
                 reason = "high-impact, cross-module, weakly verified, or contract-sensitive review"
         elif args.writes == "none" and (high_impact or contract_sensitive):
-            profile = ("delegated_reviewer", "gpt-5.6-sol", "high")
+            profile = "delegated_reviewer"
             reason = "high-impact or contract-sensitive read-only evidence collection"
         elif args.writes == "none" and weak_verification:
-            profile = ("delegated_researcher", "gpt-5.6-terra", "medium")
+            profile = "delegated_researcher"
             reason = "read-only evidence collection with explicit verification gaps"
         elif (
             args.writes == "none"
@@ -255,18 +273,19 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
             and args.risk in {"low", "medium"}
             and args.verification in {"normal", "strong"}
         ):
-            profile = ("delegated_deep_researcher", "gpt-5.6-terra", "high")
+            profile = "delegated_deep_researcher"
             reason = "high-ambiguity research with bounded risk and verifiable evidence"
         elif args.writes == "none" and (
             args.ambiguity == "medium" or args.scope == "cross-module"
+            or args.risk != "low" or args.coordination != "isolated"
         ):
-            profile = ("delegated_researcher", "gpt-5.6-terra", "medium")
-            reason = "multi-file or moderately ambiguous read-only research"
+            profile = "delegated_researcher"
+            reason = "multi-file, moderate-risk, steerable, or moderately ambiguous read-only research"
         elif args.writes == "none":
-            profile = ("delegated_explorer", "gpt-5.6-terra", "low")
+            profile = "delegated_explorer"
             reason = "bounded read-only evidence collection"
         elif high_impact or broad or weak_verification or contract_sensitive:
-            profile = ("delegated_senior_worker", "gpt-5.6-sol", "high")
+            profile = "delegated_senior_worker"
             reason = "high-risk, contract-sensitive, weakly verified, or cross-module execution"
         elif (
             args.writes == "bounded"
@@ -275,38 +294,33 @@ def select(args: argparse.Namespace) -> dict[str, Any]:
             and args.risk in {"low", "medium"}
             and args.verification == "strong"
         ):
-            profile = ("delegated_complex_worker", "gpt-5.6-terra", "high")
+            profile = "delegated_complex_worker"
             reason = "complex bounded execution protected by strong verification"
         else:
-            profile = ("delegated_worker", "gpt-5.6-terra", "medium")
+            profile = "delegated_worker"
             reason = "ordinary bounded execution"
 
-    agent_name, model, effort = profile
-    requested_model = model
-    model, effort, substitution = resolve_catalog(args.catalog, model, effort)
-    if requested_model == "gpt-5.6-luna" and model != requested_model:
-        if agent_name == "delegated_batch_explorer":
-            agent_name = "delegated_explorer"
-        elif agent_name == "delegated_batch_worker":
-            agent_name = "delegated_worker"
+    binding, substitution = resolve_role(args, profile)
+    agent_name = binding["agent_name"]
+    if substitution:
         effective_priority = "balanced"
-        routing_warnings.append(
-            substitution or "Luna unavailable; used the matching balanced profile"
-        )
+        routing_warnings.append(substitution)
     return {
         "delegate": True,
         "agent_name": agent_name,
-        "model": model,
-        "model_reasoning_effort": effort,
+        **binding,
         "reason": reason,
         "catalog_substitution": substitution,
         "requested_priority": requested_priority,
         "effective_priority": effective_priority,
         "routing_warnings": routing_warnings,
-        "recommended_transport": isolated_transport_for(args.transport_preference),
+        "recommended_transport": transport_for(args, binding),
         "transport_enforced": True,
+        "preflight_required": True,
+        "dispatchable": False,
         "transport_preference": args.transport_preference,
         "cost_gate": "justified",
+        "required_capabilities": ["computer-use", "target-app-access"] if args.kind == "computer-use" else [],
         **worker_budget,
     }
 
@@ -332,14 +346,14 @@ def delegation_value_gate(args: argparse.Namespace) -> dict[str, str | bool]:
     }
 
 
-def review_profile_for(args: argparse.Namespace) -> tuple[str, str, str]:
-    """Use Terra for ordinary bounded review and reserve Sol for material review risk."""
+def review_profile_for(args: argparse.Namespace) -> str:
+    """Choose review responsibility independently of the configured model."""
     if (
         args.kind in {"planning-audit", "arbitration"}
         and args.risk in {"high", "critical"}
         and args.ambiguity == "high"
     ):
-        return ("delegated_planning_auditor", "gpt-5.6-sol", "xhigh")
+        return "delegated_planning_auditor"
     if (
         args.risk in {"low", "medium"}
         and args.scope != "cross-module"
@@ -348,8 +362,8 @@ def review_profile_for(args: argparse.Namespace) -> tuple[str, str, str]:
         and args.sensitivity == "none"
         and args.priority != "quality"
     ):
-        return ("delegated_standard_reviewer", "gpt-5.6-terra", "high")
-    return ("delegated_reviewer", "gpt-5.6-sol", "high")
+        return "delegated_standard_reviewer"
+    return "delegated_reviewer"
 
 
 def worker_budget_for(args: argparse.Namespace) -> dict[str, int | bool | str]:
@@ -357,6 +371,10 @@ def worker_budget_for(args: argparse.Namespace) -> dict[str, int | bool | str]:
         args.workload == "batch" and args.sharding_evidence != "none"
     )
     max_workers = 2 if args.workload != "batch" or sharding_justified else 1
+    if args.kind == "computer-use":
+        # One task owns its app/tab session; do not shard shared UI state.
+        max_workers = 1
+        sharding_justified = False
     bundle_required = args.requested_workers > max_workers
     return {
         "max_workers": max_workers,
@@ -367,17 +385,43 @@ def worker_budget_for(args: argparse.Namespace) -> dict[str, int | bool | str]:
     }
 
 
-def isolated_transport_for(preference: str) -> str:
-    transports = {
-        "auto": "native-named-agent",
-        "native-verified": "native-named-agent",
-        "user-owned-desktop-task": "user-owned-desktop-task",
-        "explicit-cli": "explicit-codex-cli",
-    }
-    return transports[preference]
+def transport_for(args: argparse.Namespace, binding: dict[str, str]) -> str:
+    role = binding["agent_name"]
+    observed = getattr(args, "native_binding", [])
+    if not isinstance(observed, list) or any(not isinstance(x, dict) for x in observed):
+        raise SystemExit("native bindings must be JSON objects")
+    matches = [x for x in observed if x.get("agent_name") == role]
+    if len(matches) > 1:
+        raise SystemExit(f"duplicate native binding evidence: {role}")
+    verified = bool(matches) and all(
+        matches[0].get(key) == binding[key]
+        for key in ("model", "model_reasoning_effort", "sandbox_mode")
+    )
+    if args.coordination == "steerable" and not verified:
+        raise SystemExit(f"steerable role has no matching native model/effort/permission evidence: {role}")
+    if args.transport_preference == "native-verified":
+        if not verified:
+            raise SystemExit(f"native binding does not match configured model/effort/permissions: {role}")
+        return "native-named-agent"
+    if args.transport_preference == "auto":
+        if verified:
+            return "native-named-agent"
+        return "explicit-codex-app-server" if args.kind == "computer-use" else "explicit-codex-cli"
+    if args.transport_preference == "explicit-cli":
+        return "explicit-codex-app-server" if args.kind == "computer-use" else "explicit-codex-cli"
+    return "user-owned-desktop-task"
 
 
-def can_use_luna_read(args: argparse.Namespace) -> bool:
+def resolve_role(args: argparse.Namespace, role: str) -> tuple[dict[str, str], str | None]:
+    home = getattr(args, "codex_home", None) or default_codex_home()
+    binding = load_binding(home, role)
+    path = catalog_path(home, getattr(args, "catalog", None))
+    # Catalog absence/unavailability is a blocker, never permission to change role/model.
+    resolve_catalog(path, binding["model"], binding["model_reasoning_effort"])
+    return binding, None
+
+
+def can_use_batch_read(args: argparse.Namespace) -> bool:
     return (
         args.priority == "economy"
         and args.workload == "batch"
@@ -392,7 +436,7 @@ def can_use_luna_read(args: argparse.Namespace) -> bool:
     )
 
 
-def can_use_luna_write(args: argparse.Namespace) -> bool:
+def can_use_batch_write(args: argparse.Namespace) -> bool:
     return (
         args.priority == "economy"
         and args.workload == "batch"
@@ -408,7 +452,7 @@ def can_use_luna_write(args: argparse.Namespace) -> bool:
     )
 
 
-def luna_rejection_reason(args: argparse.Namespace) -> str:
+def batch_rejection_reason(args: argparse.Namespace) -> str:
     failed: list[str] = []
     if args.workload != "batch":
         failed.append("workload is not batch")
@@ -432,39 +476,8 @@ def luna_rejection_reason(args: argparse.Namespace) -> str:
         failed.append("write verification is not strong")
     if args.writes != "none" and args.kind not in {"documentation", "implementation"}:
         failed.append("write kind is not a bounded execution kind")
-    detail = ", ".join(failed) or "task does not satisfy the Luna safety gate"
+    detail = ", ".join(failed) or "task does not satisfy the batch safety gate"
     return f"economy fell back to balanced: {detail}"
-
-
-def resolve_catalog(catalog_path: Path, preferred_model: str, effort: str) -> tuple[str, str, str | None]:
-    if not catalog_path.is_file():
-        raise SystemExit(f"model catalog unavailable: {catalog_path}")
-
-    data = json.loads(catalog_path.read_text(encoding="utf-8"))
-    models = data.get("models", [])
-    supported: dict[str, set[str]] = {}
-    for item in models:
-        slug = item.get("slug")
-        if not isinstance(slug, str) or not slug.startswith("gpt-5.6"):
-            continue
-        levels = item.get("supported_reasoning_levels", [])
-        supported[slug] = {
-            level["effort"]
-            for level in levels
-            if isinstance(level, dict) and isinstance(level.get("effort"), str)
-        }
-
-    if effort in supported.get(preferred_model, set()):
-        return preferred_model, effort, None
-
-    if preferred_model == "gpt-5.6-luna" and effort in supported.get("gpt-5.6-terra", set()):
-        return (
-            "gpt-5.6-terra",
-            effort,
-            f"{preferred_model} does not support {effort}; used the matching gpt-5.6-terra profile",
-        )
-
-    raise SystemExit(f"required profile unavailable: {preferred_model}/{effort}")
 
 
 def main() -> None:
