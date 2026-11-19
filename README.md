@@ -29,10 +29,11 @@ The protocol is written primarily in Chinese; the scripts and structured output 
 
 ## Quick start
 
-The computer-task entry points load their implementation and tests from
-`/Volumes/工作盘/_Codex/skills/delegated-execution-protocol-runtime/`.
-Keep `run_computer_task.py` and `test_run_computer_task.py` in that directory
-when deploying the skill with Skills Manager.
+Set the computer runtime directory in
+`$CODEX_HOME/delegated-execution-protocol-runtime.path` (`$CODEX_HOME` defaults
+to `~/.codex`). The file contains one absolute directory path. That directory
+provides `run_computer_task.py` and `test_run_computer_task.py` to the skill's
+entry points, including after deployment with Skills Manager.
 
 With the runtime files in place, run the protocol validation:
 
