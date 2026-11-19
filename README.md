@@ -29,7 +29,12 @@ The protocol is written primarily in Chinese; the scripts and structured output 
 
 ## Quick start
 
-Clone the repository, then run the self-contained validation:
+The computer-task entry points load their implementation and tests from
+`/Volumes/工作盘/_Codex/skills/delegated-execution-protocol-runtime/`.
+Keep `run_computer_task.py` and `test_run_computer_task.py` in that directory
+when deploying the skill with Skills Manager.
+
+With the runtime files in place, run the protocol validation:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_protocol.py

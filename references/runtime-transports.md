@@ -1,7 +1,7 @@
 # 运行时派发与配置绑定
 
-verified_at: 2026-10-30
-verification_surface: CLI 0.166.0 named-role binding and workspace-write passed. Resuming the same Terra/medium computer worker through a request-capable app-server client with on-request approvals completed Calculator 13+29 and AX readback 42. The client supplied the human-authorized, task-scoped Calculator approvals without persistent grants. Plain exec previously received no accepted app-approval response; this was not evidence of a safety-review rejection. Desktop role refresh and browser enablement remain separate.
+verified_at: 2026-11-19
+verification_surface: CLI 0.169.0 read-only smoke requests verified GPT-6.2 Sol/medium and GPT-6.2 Astra/xhigh with rollout metadata. The Terra app-server Calculator run passed on CLI 0.166.0 on 2026-10-30. On 2026-11-19 its helper sources were restored by SHA256 and passed the client regression suite.
 
 ## 配置与原生能力
 
@@ -56,4 +56,4 @@ sandbox_mode 描述本地执行的文件系统边界，不代表 MCP/API 获得�
 
 电脑任务使用[固定入口](computer-tasks.md)，不临时重写 app-server 客户端、不重复做无工具文字探针。`Computer Use was not approved` 只表示请求没有收到 accept，不能直接归因为安全模型或用户拒绝。文字授权要通过正式 MCP elicitation 回执落到工具层。
 
-固定入口保留具名角色、model/effort/sandbox 核验，仅在本次明确授权覆盖的低风险应用访问请求上返回 accept；其他请求停止交主对话。它不创建永久授权，不替代具体任务的界面验收。当前 CLI 0.166.0 的具名 Terra/medium、workspace-write、Calculator 13+29=42 已有实机证据；当前任务仍按实际工具和应用状态验证。
+固定入口保留具名角色、model/effort/sandbox 核验，仅在本次明确授权覆盖的低风险应用访问请求上返回 accept；其他请求停止交主对话。它不创建永久授权，不替代具体任务的界面验收。2026-10-30 在 CLI 0.166.0 的具名 Terra/medium、workspace-write、Calculator 13+29=42 已有实机证据；当前任务仍按实际工具和应用状态验证。

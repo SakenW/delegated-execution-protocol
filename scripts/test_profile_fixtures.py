@@ -6,15 +6,15 @@ TEST_BINDINGS = {
     "delegated_batch_explorer": ("gpt-6-luna", "high"),
     "delegated_batch_worker": ("gpt-6-luna", "high"),
     "delegated_explorer": ("gpt-6-luna", "high"),
-    "delegated_researcher": ("gpt-6.1-sol", "medium"),
-    "delegated_deep_researcher": ("gpt-6.1-sol", "high"),
-    "delegated_standard_reviewer": ("gpt-6.1-sol", "high"),
-    "delegated_worker": ("gpt-6.1-sol", "medium"),
+    "delegated_researcher": ("gpt-6.2-sol", "medium"),
+    "delegated_deep_researcher": ("gpt-6.2-sol", "high"),
+    "delegated_standard_reviewer": ("gpt-6.2-sol", "high"),
+    "delegated_worker": ("gpt-6.2-sol", "medium"),
     "delegated_computer_worker": ("gpt-6.1-terra", "medium"),
-    "delegated_complex_worker": ("gpt-6.1-sol", "high"),
-    "delegated_senior_worker": ("gpt-6-astra", "high"),
-    "delegated_reviewer": ("gpt-6-astra", "high"),
-    "delegated_planning_auditor": ("gpt-6-astra", "xhigh"),
+    "delegated_complex_worker": ("gpt-6.2-sol", "high"),
+    "delegated_senior_worker": ("gpt-6.2-astra", "high"),
+    "delegated_reviewer": ("gpt-6.2-astra", "high"),
+    "delegated_planning_auditor": ("gpt-6.2-astra", "xhigh"),
 }
 
 def binding(home: Path, role: str) -> dict[str, str]:

@@ -100,7 +100,7 @@ class ProfileSafetyTests(unittest.TestCase):
             validator = load_validator()
             validator.fixture_catalog(home / "models_cache.json")
             profile = home / "agents/delegated_reviewer.toml"
-            profile.write_text(profile.read_text().replace('gpt-6-astra', 'unavailable-model'))
+            profile.write_text(profile.read_text().replace('gpt-6.2-astra', 'unavailable-model'))
             with self.assertRaisesRegex(SystemExit, "required profile unavailable"):
                 validator.validate_profile_safety(home)
 

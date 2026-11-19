@@ -36,7 +36,7 @@ CLI 分类参数由主线程按证据推断。`--help` 是参数清单，不复�
 
 配置源是所选 CODEX_HOME 的 config.toml 中注册的 config_file，未注册时读取 agents/<role>.toml。其中 sandbox_mode 表示协议所需权限；原生子 agent 继承父会话权限，须先使父会话满足该约束，角色文件本身不会创建独立沙箱。只有本协议角色要求显式 model/effort/sandbox，以避免意外继承权限；这不是 Codex 平台对所有 custom agent 的要求。生产实现不包含默认模型名表。
 
-当前安装按任务专长分配：Luna 用于清晰可验证的批量处理和聚焦探索，Terra 处理有界电脑操作，Sol 承担工程实现与技术研究，Astra 负责高影响与困难裁决。具体 model/effort 仍以所选角色 TOML 为准。定价依据、推荐初始绑定和验证限制见 [GPT-6 设计依据](model-policy.md)，普通派发无需加载该参考。5.6 不再属于本机默认绑定或自动回退；显式配置其他模型/provider 的能力保留。
+当前安装按任务专长分配：Luna 用于清晰可验证的批量处理和聚焦探索，Terra 处理有界电脑操作，Sol 承担工程实现与技术研究，Astra 负责高影响与困难裁决。具体 model/effort 仍以所选角色 TOML 为准。当前分工与验证方法见[模型参考](model-policy.md)，普通派发无需加载。
 
 ## 使用 selector
 

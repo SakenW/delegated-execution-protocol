@@ -69,14 +69,14 @@ class SelectorTests(unittest.TestCase):
                             "supported_reasoning_levels": [{"effort": "medium"}],
                         },
                         {
-                            "slug": "gpt-6-astra",
+                            "slug": "gpt-6.2-astra",
                             "supported_reasoning_levels": [
                                 {"effort": level}
                                 for level in ("low", "medium", "high", "xhigh")
                             ],
                         },
                         {
-                            "slug": "gpt-6.1-sol",
+                            "slug": "gpt-6.2-sol",
                             "supported_reasoning_levels": [
                                 {"effort": level}
                                 for level in ("low", "medium", "high")
@@ -236,7 +236,7 @@ class SelectorTests(unittest.TestCase):
         )
         self.assertTrue(result["delegate"])
         self.assertEqual(result["agent_name"], "delegated_standard_reviewer")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
         self.assertEqual(result["cost_gate"], "justified")
 
@@ -429,7 +429,7 @@ class SelectorTests(unittest.TestCase):
     def test_routes_bounded_implementation_to_sol_medium(self) -> None:
         result = load_selector().select(args(self.catalog))
         self.assertEqual(result["agent_name"], "delegated_worker")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["model_reasoning_effort"], "medium")
 
     def test_routes_economy_batch_read_only_to_luna_high(self) -> None:
@@ -485,7 +485,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_worker")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["effective_priority"], "balanced")
         self.assertTrue(result["routing_warnings"])
 
@@ -504,7 +504,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_senior_worker")
-        self.assertEqual(result["model"], "gpt-6-astra")
+        self.assertEqual(result["model"], "gpt-6.2-astra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_economy_batch_write_without_strong_verification_does_not_use_luna(self) -> None:
@@ -541,7 +541,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_researcher")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["model_reasoning_effort"], "medium")
         self.assertTrue(any("read verification is weak" in item for item in result["routing_warnings"]))
         self.assertTrue(any("report evidence gaps" in item for item in result["routing_warnings"]))
@@ -564,7 +564,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_researcher")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["model_reasoning_effort"], "medium")
         self.assertEqual(result["recommended_transport"], "native-named-agent")
         self.assertEqual(result["effective_priority"], "balanced")
@@ -656,7 +656,7 @@ class SelectorTests(unittest.TestCase):
             item for item in data["models"] if item["slug"] != "gpt-6-luna"
         ]
         for item in data["models"]:
-            if item["slug"] == "gpt-6.1-sol":
+            if item["slug"] == "gpt-6.2-sol":
                 item["supported_reasoning_levels"] = [{"effort": "low"}]
         catalog.write_text(json.dumps(data), encoding="utf-8")
 
@@ -688,7 +688,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_researcher")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["model_reasoning_effort"], "medium")
 
     def test_routes_high_ambiguity_low_risk_research_to_sol_high(self) -> None:
@@ -704,7 +704,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_deep_researcher")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_routes_steerable_high_ambiguity_research_to_sol_high(self) -> None:
@@ -722,7 +722,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_deep_researcher")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
         self.assertEqual(result["recommended_transport"], "native-named-agent")
 
@@ -739,7 +739,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_complex_worker")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_routes_steerable_complex_bounded_write_to_sol_high(self) -> None:
@@ -757,7 +757,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_complex_worker")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
         self.assertEqual(result["recommended_transport"], "native-named-agent")
 
@@ -804,7 +804,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_reviewer")
-        self.assertEqual(result["model"], "gpt-6-astra")
+        self.assertEqual(result["model"], "gpt-6.2-astra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_routes_serious_review_to_astra_high(self) -> None:
@@ -818,7 +818,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_reviewer")
-        self.assertEqual(result["model"], "gpt-6-astra")
+        self.assertEqual(result["model"], "gpt-6.2-astra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_routes_bounded_low_risk_review_to_standard_reviewer(self) -> None:
@@ -835,7 +835,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_standard_reviewer")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_contract_sensitive_review_routes_to_astra_high(self) -> None:
@@ -853,7 +853,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_reviewer")
-        self.assertEqual(result["model"], "gpt-6-astra")
+        self.assertEqual(result["model"], "gpt-6.2-astra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_routes_high_risk_read_only_scan_to_reviewer(self) -> None:
@@ -989,7 +989,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_senior_worker")
-        self.assertEqual(result["model"], "gpt-6-astra")
+        self.assertEqual(result["model"], "gpt-6.2-astra")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_routes_non_xhigh_bounded_planning_audit_to_standard_reviewer(self) -> None:
@@ -1004,7 +1004,7 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_standard_reviewer")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
         self.assertEqual(result["model_reasoning_effort"], "high")
 
     def test_uses_xhigh_only_for_high_impact_high_ambiguity_audit(self) -> None:
@@ -1019,12 +1019,12 @@ class SelectorTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["agent_name"], "delegated_planning_auditor")
-        self.assertEqual(result["model"], "gpt-6-astra")
+        self.assertEqual(result["model"], "gpt-6.2-astra")
         self.assertEqual(result["model_reasoning_effort"], "xhigh")
 
     def test_model_and_effort_come_from_role_config_for_any_provider(self) -> None:
         profile = Path(self.temp_dir.name) / "agents/delegated_reviewer.toml"
-        profile.write_text(profile.read_text().replace('gpt-6-astra', 'vendor/custom-review').replace('"high"', '"medium"'))
+        profile.write_text(profile.read_text().replace('gpt-6.2-astra', 'vendor/custom-review').replace('"high"', '"medium"'))
         data = json.loads(self.catalog.read_text())
         data["models"].append({"slug": "vendor/custom-review", "supported_reasoning_levels": [{"effort": "medium"}]})
         self.catalog.write_text(json.dumps(data))
@@ -1056,10 +1056,10 @@ class SelectorTests(unittest.TestCase):
 
     def test_missing_astra_does_not_silently_fall_back_to_sol(self) -> None:
         data = json.loads(self.catalog.read_text())
-        data["models"] = [x for x in data["models"] if x["slug"] != "gpt-6-astra"]
+        data["models"] = [x for x in data["models"] if x["slug"] != "gpt-6.2-astra"]
         data["models"].append({"slug": "gpt-5.6-sol", "supported_reasoning_levels": [{"effort": "high"}]})
         self.catalog.write_text(json.dumps(data))
-        with self.assertRaisesRegex(SystemExit, "required profile unavailable: gpt-6-astra/high"):
+        with self.assertRaisesRegex(SystemExit, "required profile unavailable: gpt-6.2-astra/high"):
             load_selector().select(args(self.catalog, kind="review", writes="none", risk="high"))
 
     def test_unavailable_effort_fails_closed(self) -> None:
@@ -1111,7 +1111,7 @@ class SelectorTests(unittest.TestCase):
         result = load_selector().select(args(self.catalog, kind="scan", writes="none",
                                              scope="small", risk="medium"))
         self.assertEqual(result["agent_name"], "delegated_researcher")
-        self.assertEqual(result["model"], "gpt-6.1-sol")
+        self.assertEqual(result["model"], "gpt-6.2-sol")
 
     def test_missing_focused_luna_does_not_use_sol_researcher(self) -> None:
         data = json.loads(self.catalog.read_text())
@@ -1123,11 +1123,11 @@ class SelectorTests(unittest.TestCase):
 
     def test_missing_sol_does_not_revert_to_legacy_model(self) -> None:
         data = json.loads(self.catalog.read_text())
-        data["models"] = [x for x in data["models"] if x["slug"] != "gpt-6.1-sol"]
+        data["models"] = [x for x in data["models"] if x["slug"] != "gpt-6.2-sol"]
         data["models"].append({"slug": "gpt-6-sol",
                               "supported_reasoning_levels": [{"effort": "medium"}]})
         self.catalog.write_text(json.dumps(data))
-        with self.assertRaisesRegex(SystemExit, "required profile unavailable: gpt-6.1-sol/medium"):
+        with self.assertRaisesRegex(SystemExit, "required profile unavailable: gpt-6.2-sol/medium"):
             load_selector().select(args(self.catalog))
 
     def test_exhaustive_routing_invariants(self) -> None:
@@ -1270,7 +1270,7 @@ class SelectorTests(unittest.TestCase):
                 or result["transport_preference"] != "auto"
             ):
                 violations.append(f"steerable transport mismatch: {label}")
-            if priority == "quality" and coordination == "isolated" and model != "gpt-6-astra":
+            if priority == "quality" and coordination == "isolated" and model != "gpt-6.2-astra":
                 violations.append(f"quality did not use configured high-capability role: {label}")
 
         self.assertEqual(violations[:10], [], f"routing invariant failures: {len(violations)}")

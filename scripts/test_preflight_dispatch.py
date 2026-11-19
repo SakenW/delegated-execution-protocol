@@ -60,7 +60,7 @@ print(json.dumps({'type':'turn.completed'}))
         result, argv = preflight.prepare(self.home, self.role, str(self.cli))
         self.assertFalse(result['dispatchable'])
         self.assertEqual(result['status'], 'probe_required')
-        self.assertEqual(argv[argv.index('--model')+1], 'gpt-6.1-sol')
+        self.assertEqual(argv[argv.index('--model')+1], 'gpt-6.2-sol')
         self.assertEqual(argv[argv.index('--sandbox')+1], 'read-only')
 
     def test_completed_probe_requires_matching_runtime(self):
@@ -89,10 +89,10 @@ print(json.dumps({'type':'turn.completed'}))
         self.assertEqual(result['status'], 'runtime_binding_unverified')
 
     def test_account_model_rejection_is_not_cli_flag_rejection(self):
-        result = self.run_probe(PROBE_TEST_ERROR="The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.")
+        result = self.run_probe(PROBE_TEST_ERROR="The 'gpt-6.2-sol' model is not supported when using Codex with a ChatGPT account.")
         self.assertEqual(result['status'], 'model_unavailable')
         self.assertFalse(result['dispatchable'])
-        self.assertEqual(result['model'], 'gpt-6.1-sol')
+        self.assertEqual(result['model'], 'gpt-6.2-sol')
 
     def test_timeout_stops_probe(self):
         result = self.run_probe(PROBE_TEST_TIMEOUT='1')

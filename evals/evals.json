@@ -28,7 +28,7 @@
       "files": [],
       "expectations": [
         "Inspects the active tool schema before choosing model, reasoning, context, or lifecycle parameters.",
-        "Creates a routing record and selects delegated_worker gpt-6.1-sol/medium for ordinary bounded implementation.",
+        "Creates a routing record and selects delegated_worker gpt-6.2-sol/medium for ordinary bounded implementation.",
         "Uses native named-agent dispatch when supported, explicit Desktop CLI overrides when differentiation matters, or verified inheritance when collaboration controls matter more.",
         "Uses runtime metadata to distinguish an applied profile from a requested or inherited assignment.",
         "Keeps within the reported concurrency capacity and reserves final judgment for the main conversation.",
@@ -62,7 +62,7 @@
     {
       "id": 3,
       "prompt": "Review a high-impact, high-ambiguity billing migration plan with weak rollback evidence. The active tool supports explicit model and reasoning selection. Decide whether to use a reviewer and define its authority.",
-      "expected_output": "A delegated_planning_auditor using gpt-6-astra/xhigh through an enforcing transport, with narrow authority and main-thread final ownership.",
+      "expected_output": "A delegated_planning_auditor using gpt-6.2-astra/xhigh through an enforcing transport, with narrow authority and main-thread final ownership.",
       "route_args": [
         "--kind",
         "planning-audit",
@@ -96,12 +96,12 @@
       "expected_route": {
         "delegate": true,
         "agent_name": "delegated_planning_auditor",
-        "model": "gpt-6-astra",
+        "model": "gpt-6.2-astra",
         "model_reasoning_effort": "xhigh"
       },
       "files": [],
       "expectations": [
-        "Selects delegated_planning_auditor with gpt-6-astra/xhigh because both impact and ambiguity are high.",
+        "Selects delegated_planning_auditor with gpt-6.2-astra/xhigh because both impact and ambiguity are high.",
         "Makes the planning auditor read-only and asks it to attack failure paths and evidence gaps.",
         "Does not let the reviewer execute the migration or make the final decision.",
         "Requires the main conversation to resolve disagreements and verify rollback evidence."
@@ -203,9 +203,9 @@
       "files": [],
       "expectations": [
         "Routes the scan to delegated_explorer with gpt-6-luna/high.",
-        "Routes ordinary implementation to delegated_worker with gpt-6.1-sol/medium.",
-        "Routes high-risk implementation to delegated_senior_worker with gpt-6-astra/high rather than a read-only reviewer.",
-        "Routes correctness review to delegated_reviewer with gpt-6-astra/high.",
+        "Routes ordinary implementation to delegated_worker with gpt-6.2-sol/medium.",
+        "Routes high-risk implementation to delegated_senior_worker with gpt-6.2-astra/high rather than a read-only reviewer.",
+        "Routes correctness review to delegated_reviewer with gpt-6.2-astra/high.",
         "Does not pretend task_name applies a custom agent and uses an enforcing transport with runtime evidence."
       ]
     },
@@ -395,7 +395,7 @@
       "expected_route": {
         "delegate": true,
         "agent_name": "delegated_worker",
-        "model": "gpt-6.1-sol",
+        "model": "gpt-6.2-sol",
         "model_reasoning_effort": "medium",
         "effective_priority": "balanced"
       },
@@ -542,7 +542,7 @@
     {
       "id": 15,
       "prompt": "Investigate a high-ambiguity product-boundary question across several modules. The work is read-only, low-risk, isolated, and has strong source-level verification. It is research, not a correctness or security review. Route it without overusing Sol.",
-      "expected_output": "A delegated_deep_researcher route using gpt-6.1-sol/high through the enforced isolated transport.",
+      "expected_output": "A delegated_deep_researcher route using gpt-6.2-sol/high through the enforced isolated transport.",
       "route_args": [
         "--kind",
         "scan",
@@ -576,12 +576,12 @@
       "expected_route": {
         "delegate": true,
         "agent_name": "delegated_deep_researcher",
-        "model": "gpt-6.1-sol",
+        "model": "gpt-6.2-sol",
         "model_reasoning_effort": "high"
       },
       "files": [],
       "expectations": [
-        "Selects delegated_deep_researcher with gpt-6.1-sol/high.",
+        "Selects delegated_deep_researcher with gpt-6.2-sol/high.",
         "Requires read-only execution and evidence with paths, line references, confidence, and unresolved gaps.",
         "Uses explicit CLI or another proven model-capable isolated transport.",
         "Reports an evidence gap if verification becomes weak; escalates to Astra/high only if risk becomes high or the task becomes a high-impact, cross-module, contract-sensitive, or quality-priority review."
@@ -590,7 +590,7 @@
     {
       "id": 16,
       "prompt": "Implement a high-ambiguity but bounded change in one module. Risk is medium, may-edit ownership is explicit, no public contract changes, and strong targeted tests exist. Route it while preserving a strict escalation boundary.",
-      "expected_output": "A delegated_complex_worker route using gpt-6.1-sol/high, bounded workspace-write ownership, and strong verification.",
+      "expected_output": "A delegated_complex_worker route using gpt-6.2-sol/high, bounded workspace-write ownership, and strong verification.",
       "route_args": [
         "--kind",
         "implementation",
@@ -624,12 +624,12 @@
       "expected_route": {
         "delegate": true,
         "agent_name": "delegated_complex_worker",
-        "model": "gpt-6.1-sol",
+        "model": "gpt-6.2-sol",
         "model_reasoning_effort": "high"
       },
       "files": [],
       "expectations": [
-        "Selects delegated_complex_worker with gpt-6.1-sol/high.",
+        "Selects delegated_complex_worker with gpt-6.2-sol/high.",
         "Requires bounded non-cross-module ownership and strong verification.",
         "Stops and escalates if risk, scope, rollback uncertainty, or contract impact expands.",
         "Keeps high-risk, weakly verified, broad, cross-module, or quality-priority execution on Astra/high."
@@ -871,7 +871,7 @@
     {
       "id": 23,
       "prompt": "Independently review one bounded module change. Risk is low, scope is not cross-module, source evidence is clear, focused verification is strong, and quality priority was not requested.",
-      "expected_output": "A read-only delegated_standard_reviewer using gpt-6.1-sol/high, with final acceptance retained by the main conversation.",
+      "expected_output": "A read-only delegated_standard_reviewer using gpt-6.2-sol/high, with final acceptance retained by the main conversation.",
       "route_args": [
         "--kind",
         "review",
@@ -905,12 +905,12 @@
       "expected_route": {
         "delegate": true,
         "agent_name": "delegated_standard_reviewer",
-        "model": "gpt-6.1-sol",
+        "model": "gpt-6.2-sol",
         "model_reasoning_effort": "high"
       },
       "files": [],
       "expectations": [
-        "Uses delegated_standard_reviewer with gpt-6.1-sol/high.",
+        "Uses delegated_standard_reviewer with gpt-6.2-sol/high.",
         "Keeps the reviewer read-only and bounded to the supplied module.",
         "Escalates only when objective risk, scope, contract, or evidence triggers appear.",
         "Leaves final acceptance with the main conversation."
@@ -919,7 +919,7 @@
     {
       "id": 24,
       "prompt": "Independently review a cross-module production rollback contract with high risk and incomplete verification. Economy is preferred but correctness is mandatory.",
-      "expected_output": "A read-only delegated_reviewer using gpt-6-astra/high because the review is high-risk, cross-module, production-sensitive, and weakly verified.",
+      "expected_output": "A read-only delegated_reviewer using gpt-6.2-astra/high because the review is high-risk, cross-module, production-sensitive, and weakly verified.",
       "route_args": [
         "--kind",
         "review",
@@ -953,7 +953,7 @@
       "expected_route": {
         "delegate": true,
         "agent_name": "delegated_reviewer",
-        "model": "gpt-6-astra",
+        "model": "gpt-6.2-astra",
         "model_reasoning_effort": "high"
       },
       "expected_route_contains": {
@@ -963,7 +963,7 @@
       },
       "files": [],
       "expectations": [
-        "Uses delegated_reviewer with gpt-6-astra/high.",
+        "Uses delegated_reviewer with gpt-6.2-astra/high.",
         "Does not downgrade a high-risk cross-module production review to Sol.",
         "Reports the incomplete verification as an evidence gap.",
         "Keeps the reviewer read-only and final acceptance in the main conversation."
@@ -972,7 +972,7 @@
     {
       "id": 25,
       "prompt": "Review a bounded low-risk migration contract with strong focused verification. The task is contract-sensitive even though it is not cross-module.",
-      "expected_output": "A delegated_reviewer route using gpt-6-astra/high because contract sensitivity overrides the ordinary Sol reviewer tier.",
+      "expected_output": "A delegated_reviewer route using gpt-6.2-astra/high because contract sensitivity overrides the ordinary Sol reviewer tier.",
       "route_args": [
         "--kind",
         "review",
@@ -1006,7 +1006,7 @@
       "expected_route": {
         "delegate": true,
         "agent_name": "delegated_reviewer",
-        "model": "gpt-6-astra",
+        "model": "gpt-6.2-astra",
         "model_reasoning_effort": "high"
       },
       "files": [],
