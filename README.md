@@ -33,7 +33,7 @@ Set the computer runtime directory in
 `$CODEX_HOME/delegated-execution-protocol-runtime.path` (`$CODEX_HOME` defaults
 to `~/.codex`). The file contains one absolute directory path. That directory
 provides `run_computer_task.py` and `test_run_computer_task.py` to the skill's
-entry points, including after deployment with Skills Manager.
+entry points, including after deployment with Skills Manager. Use the [guarded sync command](CONTRIBUTING.md#sync-the-local-skills-manager-installation) when refreshing this skill.
 
 With the runtime files in place, run the protocol validation:
 

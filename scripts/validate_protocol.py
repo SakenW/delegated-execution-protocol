@@ -224,6 +224,11 @@ def validate_selector_behavior(skill_root: Path, cache_before: dict[str, tuple[i
         capture_output=True, text=True, check=False, env=env,
     )
     require(preflight_tests.returncode == 0, f"dispatch preflight tests failed:\n{preflight_tests.stderr}")
+    sync_tests = subprocess.run(
+        [sys.executable, str(skill_root / "scripts" / "test_sync_skills_manager.py")],
+        capture_output=True, text=True, check=False, env=env,
+    )
+    require(sync_tests.returncode == 0, f"Skills Manager sync gate tests failed:\n{sync_tests.stderr}")
     computer_tests = subprocess.run(
         [sys.executable, str(skill_root / "scripts" / "test_run_computer_task.py")],
         capture_output=True, text=True, check=False, env=env,
