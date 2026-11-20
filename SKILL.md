@@ -39,7 +39,7 @@ Jev 意图旁路默认关闭。开启后，仅当不清楚用户要求的是机�
 
 只有委派状态、阻塞、安全边界、长任务状态或差异化路由对用户重要时才发送过程说明，否则静默执行并在最终交付中汇总。有必要解释差异化路由时才读 [汇报细则](references/reporting.md)。
 
-## 维护此协议时的验证
+## 维护、验证与本机同步
 
 普通使用本 Skill 不运行协议全套测试。仅修改 selector、协议合同或验证兼容性时运行既有检查：
 
@@ -48,3 +48,11 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_protocol.py
 ```
 
 需要核验本机注册 profile 与模型目录时加 `--check-local-profiles`。静态合同检查只证明约束仍在，不等同真实模型行为验证。
+
+刷新本 Skill 的 Skills Manager 生效副本时，先在源码检出中验证并提交候选，再统一运行以下命令。把占位符换成上一次与生效副本逐文件核验一致的源码提交号。
+
+```bash
+python3 -B scripts/sync_skills_manager.py --baseline <上次核验一致的源码提交号>
+```
+
+预检发现路径、内容、文件类型或执行权限差异时，按脚本列出的路径核对，立即停止本次刷新。修复差异后重新走同一入口。禁止用 Manager 原生 `skills update`（含批量更新）绕过本 Skill 的预检。刷新完成后，以脚本对生效副本和候选提交的复核结果为准。详见[维护说明](CONTRIBUTING.md)。
