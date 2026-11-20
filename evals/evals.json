@@ -12,7 +12,6 @@
           "required_tokens": [
             "agent_type",
             "reasoning_effort",
-            "fork_turns",
             "turn_context"
           ]
         },
@@ -818,7 +817,7 @@
       ],
       "files": [],
       "expectations": [
-        "Maps auto to native named-agent because the current tool schema supports explicit profile/model/effort overrides.",
+        "Maps auto to native named-agent when observed native model, effort, sandbox and any explicitly configured provider match the selected binding.",
         "Uses native named-agent only for native-verified and a Desktop task only for an explicit user-owned Desktop request.",
         "Maps explicit-cli to explicit-codex-cli.",
         "Allows steerable only with transport_preference=auto, a concrete trigger, and native named-agent lifecycle controls."

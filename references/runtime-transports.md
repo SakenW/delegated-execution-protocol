@@ -7,7 +7,7 @@ verification_surface: CLI 0.169.0 read-only smoke requests verified GPT-6.2 Sol/
 
 Codex 可从 ~/.codex/agents 或项目 .codex/agents 读取 standalone custom agent。平台必需字段为 name、description、developer_instructions；model/effort 等可继承。本协议额外要求显式 model、model_reasoning_effort、sandbox_mode。这里的 sandbox_mode 是派发所需权限约束，并由显式 CLI 使用；原生 custom agent 不能通过该字段覆盖父会话权限。
 
-原生派发时，按当前工具定义选择不继承完整历史的参数和值，只传完成任务所需的上下文。例如，工具声明 `fork_turns` 且支持 `"none"` 时，使用 `fork_turns="none"`。完整历史 fork 不允许覆盖时，不要传 override。模型与角色清单以当前工具定义为准，不在手册保存会过期的允许模型列表。
+原生派发时，按当前工具定义选择不继承完整历史的参数和值，只传完成任务所需的上下文。工具没有提供这种方式时，在派发前报告限制。完整历史 fork 不允许覆盖时，不要传 override。模型与角色清单以当前工具定义为准，不在手册保存会过期的允许模型列表。
 
 仅在实际有效权限与配置匹配时，按 agent_type 选择角色。[官方子 agent 权限说明](https://learn.chatgpt.com/docs/agent-configuration/subagents#approvals-and-sandbox-controls)明确：原生子 agent 继承父会话 sandbox 和审批设置，custom agent 文件不能替换它们。先在父会话选用任务所需权限，再派发并核对实际值；更新 CLI 或重新加载角色不会自动解决父子权限不匹配。2026-09-05 的只读角色继承 workspace-write 正符合该机制，不能把声明当成生效权限。请求被接受是 assignment evidence，不是实际执行证明；检查 child rollout 的 turn_context / 有效权限与模型元数据后，才能报告实际 model/effort。模型名写在 prompt/task name 中不构成绑定。
 
@@ -35,7 +35,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 <skill-dir>/scripts/preflight_dispatch.py \
 
 探针只有在退出码为 0、结构化 turn 完成、返回约定标记且 rollout `turn_context` 的 model/effort/权限匹配、显式 provider 与 session_meta 一致时才返回 `verified`/`dispatchable=true`。缺元数据或权限不匹配仍阻止正式派发。模型、provider、身份、CLI 版本、角色/全局/项目配置或权限变化后重新检查；同一批精确绑定共用本批结果，不为每个任务重复探针，不跨会话复用历史成功。脚本指纹只绑定本机配置与身份文件，不证明服务端状态长期不变。正式请求仍可能失败，须按相同分类处理，不自动重试或切换。
 
-原生探针使用当前具名角色且不覆盖模型/provider，做一个有界读取；从实际 child rollout 核对 model/effort/有效权限，不能把角色 TOML 复制成观测值。父任务 workspace-write 下子任务同样可写时，不得把 read-only 角色判为匹配。原生不匹配时只能检查原绑定的 CLI；CLI 也不可用则主线程收回。
+原生探针使用当前具名角色且不覆盖模型/provider，做一个有界读取。从实际 child rollout 核对 model/effort/有效权限。若角色或全局配置显式指定 provider，还须核对 session_meta.model_provider，角色配置优先；观测值缺失或不同都视为不匹配。父任务 workspace-write 下子任务同样可写时，不得把 read-only 角色判为匹配。原生不匹配时，`native-verified` 和需要中途接收指令的任务停止派发。`auto` 下的独立任务保持原角色绑定，电脑操作检查显式 app-server，其他任务检查显式 CLI。
 
 失败分类：`cli_argument_unsupported` 只用于参数解析拒绝；`model_unavailable` 用于服务端拒绝模型；`effort_unavailable` 用于推理档位被拒绝；`authentication_failed`、`network_failed`、`rate_limited`、`timeout`、`configuration_failed`、`runtime_binding_unverified` 和 `execution_failed` 分别保留边界。输出简短结论及证据目录，完整 JSONL/stderr 留在工作盘；未知错误不概括为“CLI 不支持配置模型”。不自动换模型、provider 或角色，不扫描凭据内容到输出。原生/CLI 固定运行状态仍由应用原生管理，不在运行中迁移数据库或登录文件。
 
@@ -54,6 +54,6 @@ sandbox_mode 描述本地执行的文件系统边界，不代表 MCP/API 获得�
 
 ## 电脑操作与应用审批
 
-电脑任务使用[固定入口](computer-tasks.md)，不临时重写 app-server 客户端、不重复做无工具文字探针。`Computer Use was not approved` 只表示请求没有收到 accept，不能直接归因为安全模型或用户拒绝。文字授权要通过正式 MCP elicitation 回执落到工具层。
+显式 app-server 电脑任务使用[固定入口](computer-tasks.md)，不临时重写 app-server 客户端、不重复做无工具文字探针。`Computer Use was not approved` 只表示请求没有收到 accept，不能直接归因为安全模型或用户拒绝。文字授权要通过正式 MCP elicitation 回执落到工具层。
 
 固定入口保留具名角色、model/effort/sandbox 核验，仅在本次明确授权覆盖的低风险应用访问请求上返回 accept；其他请求停止交主对话。它不创建永久授权，不替代具体任务的界面验收。2026-10-30 在 CLI 0.166.0 的具名 Terra/medium、workspace-write、Calculator 13+29=42 已有实机证据；当前任务仍按实际工具和应用状态验证。

@@ -52,7 +52,8 @@ def load_binding(home: Path, role: str) -> dict[str, str]:
     home = home.expanduser().resolve()
     if role not in ROLE_SANDBOX:
         raise SystemExit(f"unknown protocol role: {role}")
-    registration = home_config(home).get("agents", {}).get(role, {})
+    config = home_config(home)
+    registration = config.get("agents", {}).get(role, {})
     value = registration.get("config_file", f"agents/{role}.toml")
     path = Path(value).expanduser()
     if not path.is_absolute():
@@ -67,13 +68,19 @@ def load_binding(home: Path, role: str) -> dict[str, str]:
         raise SystemExit(f"unsafe sandbox for {role}: expected {ROLE_SANDBOX[role]}")
     if "permissions" in profile or "default_permissions" in profile:
         raise SystemExit(f"conflicting permission override in {role}; use its explicit sandbox contract")
-    return {
+    provider = profile.get("model_provider", config.get("model_provider"))
+    if provider is not None and (not isinstance(provider, str) or not provider.strip()):
+        raise SystemExit("model_provider must be a nonempty string")
+    binding = {
         "agent_name": role,
         "model": profile["model"],
         "model_reasoning_effort": profile["model_reasoning_effort"],
         "sandbox_mode": profile["sandbox_mode"],
         "config_file": str(path.resolve()),
     }
+    if provider is not None:
+        binding["model_provider"] = provider
+    return binding
 
 
 def resolve_catalog(path: Path, model: str, effort: str) -> tuple[str, str, None]:

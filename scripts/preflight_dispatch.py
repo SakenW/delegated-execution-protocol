@@ -12,7 +12,7 @@ import signal
 import subprocess
 from pathlib import Path
 
-from agent_profiles import ROLE_SANDBOX, default_codex_home, home_config, load_binding, read_toml
+from agent_profiles import ROLE_SANDBOX, default_codex_home, load_binding, read_toml
 
 TOKEN = "DELEGATION_PROBE_OK"
 PROFILE_KEYS = {"name", "description", "model", "model_reasoning_effort", "sandbox_mode",
@@ -90,10 +90,7 @@ def prepare(home: Path, role: str, cli: str) -> tuple[dict, list[str]]:
     extra = set(profile) - PROFILE_KEYS
     if extra:
         raise SystemExit("unsupported role configuration; cannot apply full binding: " + ", ".join(sorted(extra)))
-    config = home_config(home)
-    provider = profile.get("model_provider", config.get("model_provider"))
-    if provider is not None and (not isinstance(provider, str) or not provider.strip()):
-        raise SystemExit("model_provider must be a nonempty string")
+    provider = binding.get("model_provider")
     executable = shutil.which(cli)
     if not executable:
         raise SystemExit("CLI executable unavailable")

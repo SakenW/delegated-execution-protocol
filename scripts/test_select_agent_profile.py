@@ -1091,6 +1091,36 @@ class SelectorTests(unittest.TestCase):
             with self.subTest(overrides=overrides), self.assertRaises(SystemExit):
                 load_selector().select(args(self.catalog, native_binding=[], **overrides))
 
+    def test_explicit_provider_matches_runtime_evidence(self) -> None:
+        home = self.catalog.parent
+        role = "delegated_reviewer"
+        evidence = binding(home, role)
+        (home / "config.toml").write_text('model_provider = "site"\n')
+        selector = load_selector()
+        for configured in ("site", "role-override"):
+            if configured == "role-override":
+                with (home / "agents" / f"{role}.toml").open("a") as profile:
+                    profile.write('model_provider = "role-override"\n')
+            for observed in (None, "other", "site", "role-override"):
+                with self.subTest(configured=configured, observed=observed):
+                    record = dict(evidence)
+                    if observed is not None:
+                        record["model_provider"] = observed
+                    task = args(self.catalog, kind="review", writes="none", risk="high",
+                                native_binding=[record])
+                    matched = observed == configured
+                    self.assertEqual(selector.select(task)["recommended_transport"],
+                                     "native-named-agent" if matched else "explicit-codex-cli")
+                    if not matched:
+                        task.transport_preference = "native-verified"
+                        with self.assertRaises(SystemExit):
+                            selector.select(task)
+                        task.transport_preference = "auto"
+                        task.coordination = "steerable"
+                        task.steering_trigger = "partial-results"
+                        with self.assertRaises(SystemExit):
+                            selector.select(task)
+
     def test_native_permission_mismatch_falls_back_to_read_only_cli(self) -> None:
         evidence = binding(Path(self.temp_dir.name), "delegated_reviewer")
         evidence["sandbox_mode"] = "workspace-write"

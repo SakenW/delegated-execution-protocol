@@ -94,7 +94,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
     )
     parser.add_argument("--codex-home", type=Path, default=default_codex_home())
-    parser.add_argument("--native-binding", type=json.loads, action="append", default=[], help="Observed native binding JSON: agent_name, model, model_reasoning_effort, sandbox_mode; repeat per role")
+    parser.add_argument("--native-binding", type=json.loads, action="append", default=[], help="Observed native binding JSON: agent_name, model, model_reasoning_effort, sandbox_mode, and model_provider when configured; repeat per role")
     return parser.parse_args()
 
 
@@ -393,15 +393,15 @@ def transport_for(args: argparse.Namespace, binding: dict[str, str]) -> str:
     matches = [x for x in observed if x.get("agent_name") == role]
     if len(matches) > 1:
         raise SystemExit(f"duplicate native binding evidence: {role}")
-    verified = bool(matches) and all(
-        matches[0].get(key) == binding[key]
-        for key in ("model", "model_reasoning_effort", "sandbox_mode")
-    )
+    required_fields = ["model", "model_reasoning_effort", "sandbox_mode"]
+    if "model_provider" in binding:
+        required_fields.append("model_provider")
+    verified = bool(matches) and all(matches[0].get(key) == binding[key] for key in required_fields)
     if args.coordination == "steerable" and not verified:
-        raise SystemExit(f"steerable role has no matching native model/effort/permission evidence: {role}")
+        raise SystemExit(f"steerable role has no matching native model/effort/permission evidence (including configured provider): {role}")
     if args.transport_preference == "native-verified":
         if not verified:
-            raise SystemExit(f"native binding does not match configured model/effort/permissions: {role}")
+            raise SystemExit(f"native binding does not match configured model/effort/permissions or provider: {role}")
         return "native-named-agent"
     if args.transport_preference == "auto":
         if verified:

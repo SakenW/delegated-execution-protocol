@@ -50,10 +50,10 @@ python3 <skill-dir>/scripts/select_agent_profile.py \
 
 默认从 CODEX_HOME（未设置时 ~/.codex）读取角色与 model_catalog_json，未指定模型目录时再用 models_cache.json。可用 `--codex-home`、`--catalog` 明确指定来源。它检查精确模型 ID/effort，不按模型代际或 provider 前缀过滤；没有目录、模型、effort 或角色权限证据就失败关闭。
 
-原生调用需要通过 `--native-binding` 传入当前实际观测的角色、model、model_reasoning_effort 与 sandbox_mode JSON，可按角色重复；仅有角色名或 TOML 声明不算生效证据。selector 逐项与所选配置比较。不能把读取的配置直接复制成观测值；它是调用方提供的运行时证据，不是 selector 自行探测，也不证明下一次调用已经执行。配置、工具或父级权限变化后重新核对。
+原生调用需要通过 `--native-binding` 传入当前实际观测的角色、model、model_reasoning_effort、sandbox_mode，以及显式配置时的 model_provider JSON，可按角色重复；仅有角色名或 TOML 声明不算生效证据。selector 逐项与所选配置比较。不能把读取的配置直接复制成观测值；它是调用方提供的运行时证据，不是 selector 自行探测，也不证明下一次调用已经执行。配置、工具或父级权限变化后重新核对。
 
 2026-09-05 实测：新原生角色正确使用 Astra/high，但从 workspace-write 父任务派发的 reviewer 仍继承 workspace-write，未落实 TOML 的 read-only。这样的证据必须判为不匹配并改走显式只读 CLI；不伪称原生角色已只读。
-- `auto`：当前观测的模型/effort/权限均匹配角色配置时使用 native-named-agent；否则电脑任务走 explicit-codex-app-server，其他任务走 explicit-codex-cli。
+- `auto`：当前观测的模型、effort、权限及显式 provider 均匹配有效配置时使用 native-named-agent；否则电脑任务走 explicit-codex-app-server，其他任务走 explicit-codex-cli。
 - `native-verified`：缺少匹配的当前原生证据就拒绝，不静默替换。
 - `explicit-cli`：电脑任务使用显式 app-server 审批入口，其他任务使用显式 CLI。
 - `user-owned-desktop-task`：仅在用户明确要求独立、后台或侧栏任务时使用，不能用于内部委派捷径。

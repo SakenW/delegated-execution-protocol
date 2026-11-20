@@ -15,7 +15,7 @@ The protocol is written primarily in Chinese; the scripts and structured output 
 - Cap one-off and batch concurrency at two workers; batches default to one unless throughput evidence justifies sharding.
 - Treat declared model labels as untrusted until the runtime proves the actual model, reasoning effort, and transport.
 - Fail closed if a requested model/effort is unavailable.
-- Use Terra/high for bounded low- or medium-risk review, reserving Sol/high for high-impact or contract-sensitive review.
+- Use `delegated_standard_reviewer` for bounded low- or medium-risk reviews with verifiable evidence, and `delegated_reviewer` for high-risk, cross-module or contract-sensitive reviews. See the [model policy](references/model-policy.md) for the current bindings.
 
 ## Repository layout
 
@@ -56,17 +56,17 @@ python3 scripts/select_agent_profile.py \
   --sharding-evidence none --transport-preference auto
 ```
 
-The JSON result is a recommendation and policy decision. Before dispatch, verify that the selected transport can actually enforce the returned profile. If it cannot, either use an enforcing isolated transport or report the inherited runtime configuration accurately.
+The JSON result is a recommendation and policy decision. Before dispatch, verify that the selected transport can actually enforce the returned profile. Under `auto`, missing or mismatched native evidence stops steerable work. Isolated computer tasks use the explicit app-server, and other isolated tasks use the explicit CLI. Native evidence must include a matching provider when the role or global configuration specifies one.
 
 ## Optional local-installation check
 
-The default validator is portable and does not inspect your home directory. If you maintain the corresponding Codex profile files locally, opt in to that extra check:
+Both validation modes run the computer client regression suite through the runtime path configured above, including on a clean checkout or runner. The default uses fixtures for agent profiles and the model catalog. To also check the installed profiles and catalog, run:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_protocol.py --check-local-profiles
 ```
 
-This expects `~/.codex/config.toml`, `~/.codex/models_cache.json`, and profiles named by `EXPECTED_PROFILES` in `scripts/validate_protocol.py`.
+The extra check reads the selected Codex home (override with `--codex-home`). It checks every protocol role against its registered profile or standalone role file and the configured model catalog (default `models_cache.json`). The runtime path for the computer tests still comes from `CODEX_HOME`.
 
 ## Installation as a Codex skill
 

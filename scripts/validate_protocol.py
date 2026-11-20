@@ -172,7 +172,6 @@ def validate_runtime_references(skill_root: Path) -> None:
         "preflight_dispatch.py",
         "dispatchable",
         "model_unavailable",
-        "fork_turns",
         "turn_context",
         "agent_type",
         "reasoning_effort",
