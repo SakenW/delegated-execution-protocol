@@ -7,7 +7,7 @@ verification_surface: CLI 0.169.0 read-only smoke requests verified GPT-6.2 Sol/
 
 Codex 可从 ~/.codex/agents 或项目 .codex/agents 读取 standalone custom agent。平台必需字段为 name、description、developer_instructions；model/effort 等可继承。本协议额外要求显式 model、model_reasoning_effort、sandbox_mode。这里的 sandbox_mode 是派发所需权限约束，并由显式 CLI 使用；原生 custom agent 不能通过该字段覆盖父会话权限。
 
-当前工具接受 agent_type、model、reasoning_effort 与 fork_context；用 `fork_context=false` 提供紧凑任务包。旧版本的 fork_turns 不是当前参数，不照搬历史调用。完整历史 fork 不允许覆盖时，不要传 override。模型与角色清单以当前工具定义为准，不在手册保存会过期的允许模型列表。
+原生派发时，按当前工具定义选择不继承完整历史的参数和值，只传完成任务所需的上下文。例如，工具声明 `fork_turns` 且支持 `"none"` 时，使用 `fork_turns="none"`。完整历史 fork 不允许覆盖时，不要传 override。模型与角色清单以当前工具定义为准，不在手册保存会过期的允许模型列表。
 
 仅在实际有效权限与配置匹配时，按 agent_type 选择角色。[官方子 agent 权限说明](https://learn.chatgpt.com/docs/agent-configuration/subagents#approvals-and-sandbox-controls)明确：原生子 agent 继承父会话 sandbox 和审批设置，custom agent 文件不能替换它们。先在父会话选用任务所需权限，再派发并核对实际值；更新 CLI 或重新加载角色不会自动解决父子权限不匹配。2026-09-05 的只读角色继承 workspace-write 正符合该机制，不能把声明当成生效权限。请求被接受是 assignment evidence，不是实际执行证明；检查 child rollout 的 turn_context / 有效权限与模型元数据后，才能报告实际 model/effort。模型名写在 prompt/task name 中不构成绑定。
 

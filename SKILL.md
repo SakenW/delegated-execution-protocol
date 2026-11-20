@@ -17,7 +17,7 @@ description: 当独立证据、可并行研究、有界实现或电脑操作委�
 
 仅对通过价值门的真实候选读取 [路由策略](references/routing-policy.md)，运行其中的 selector。遵守 `delegate=false`、`max_workers`、强制 transport 和拆分要求；字段由证据推断，不变成用户问卷。selector 先选择角色，再从实际 Agent 配置读取模型、effort 与权限；不排斥主会话或已配置角色使用其他 provider。auto 只有在当前原生绑定已核验时使用原生派发，否则选择显式 CLI。
 
-按实际需求选择已有角色；普通探索 `delegated_explorer`、多文件研究 `delegated_researcher`、实现 `delegated_worker`、高风险实现 `delegated_senior_worker`、独立高风险审查 `delegated_reviewer`，有界电脑操作 `delegated_computer_worker`。不通过任务标签声称模型切换。普通派发读 [运行时方式](references/runtime-transports.md)；电脑任务只读 [固定入口](references/computer-tasks.md)，使用内置审批脚本。 selector 只给路由建议，不证明账户/provider 可用；正式派发前必须通过该 transport 的当前检查。普通 CLI 使用 `scripts/preflight_dispatch.py`，电脑入口直接核验运行绑定，原生使用实际 child 的 model/effort/权限证据。失败回主线程，不自动替换角色、模型或 provider。
+按既定规则逐项提取、分类或核对的低风险批量任务用 `delegated_batch_explorer`。范围明确、证据可核验的低中风险正确性审查用 `delegated_standard_reviewer`。高风险、跨模块或合同敏感的独立审查用 `delegated_reviewer`。普通探索用 `delegated_explorer`，多文件研究用 `delegated_researcher`，实现用 `delegated_worker`，高风险实现用 `delegated_senior_worker`，有界电脑操作用 `delegated_computer_worker`。不通过任务标签声称模型切换。普通派发读 [运行时方式](references/runtime-transports.md)；电脑任务只读 [固定入口](references/computer-tasks.md)，使用内置审批脚本。 selector 只给路由建议，不证明账户/provider 可用；正式派发前必须通过该 transport 的当前检查。普通 CLI 使用 `scripts/preflight_dispatch.py`，电脑入口直接核验运行绑定，原生使用实际 child 的 model/effort/权限证据。失败回主线程，不自动替换角色、模型或 provider。
 
 ## 所有权与执行
 
