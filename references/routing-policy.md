@@ -61,6 +61,12 @@ python3 <skill-dir>/scripts/select_agent_profile.py \
 
 实际派发前读 [runtime-transports.md](runtime-transports.md)。若项目/profile 覆盖使本次原生角色不同于 selector 读取的配置，不得宣称相同绑定；先对齐配置来源或由主线程收回。
 
+## Jev 意图旁路
+
+默认关闭。设置环境变量 `DELEGATION_JEV_SHADOW=1` 可为当前环境开启。单次命令可用 `--jev-shadow` 开启或 `--no-jev-shadow` 关闭，命令行优先。只有确实需要辨别任务类型时才传 `--unclear-intent-summary '逐笔核对记录，尚不明确是按现成规则归类还是判断收费是否正确'`。摘要由调用方脱敏，限单行 500 字符，只保留任务目的、判据与失误后果；先去掉姓名、标识、文件路径、密钥、原文和日志。无法安全概括时省略摘要。
+
+开启且提供摘要时，先从 `~/.config/cloud-ops/env/typesafe.env` 读取 `TYPESAFE_API_KEY` 并向 TypeSafe 发送一次 Choice 请求。返回值 `jev_shadow.category` 供对照，实际派发继续使用独立填写的 selector 输入。Jev 回答 unclear、凭据缺失、网络超时或返回异常时也继续原流程；失败原因可从 `jev_shadow` 查看。关闭或省略摘要时跳过凭据读取和网络请求，输出沿用原格式。
+
 ## 保留的安全与成本策略
 
 - 审查/规划/仲裁与写入混合时，selector 顶层返回 `delegate=false`、`dispatchable=false`、`split_required=true`；先只读判断，由主线程接受后才执行 `requires_main_acceptance=true` 的有界步骤。

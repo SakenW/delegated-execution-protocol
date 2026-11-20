@@ -6,6 +6,9 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import itertools
+import io
+import os
+import sys
 import json
 import tempfile
 import unittest
@@ -1090,6 +1093,68 @@ class SelectorTests(unittest.TestCase):
         ]:
             with self.subTest(overrides=overrides), self.assertRaises(SystemExit):
                 load_selector().select(args(self.catalog, native_binding=[], **overrides))
+
+    def test_jev_shadow_never_changes_dispatch(self) -> None:
+        selector = load_selector()
+        cli = ["selector", "--codex-home", self.temp_dir.name, "--kind", "review",
+               "--writes", "none", "--risk", "high", "--ambiguity", "high",
+               "--scope", "small", "--task-size", "small", "--parallel-value", "none",
+               "--independent-evidence", "required", "--sensitivity", "none"]
+        summary = ["--unclear-intent-summary", "Determine the disposition of several records"]
+        def run(options):
+            with patch.object(sys, "argv", cli + options), patch("sys.stdout", new_callable=io.StringIO) as out:
+                selector.main()
+                return json.loads(out.getvalue())
+
+        with patch.dict(os.environ, {"DELEGATION_JEV_SHADOW": "0"}), patch("jev_shadow.observe_intent") as observe:
+            baseline = run(summary)
+            self.assertEqual(baseline["agent_name"], "delegated_reviewer")
+            self.assertEqual(run(["--jev-shadow"]), baseline)
+            observe.assert_not_called()
+            for observation in ({"status": "observed", "category": "batch"},
+                                {"status": "observed", "category": "unclear"},
+                                {"status": "unavailable", "reason": "network"}):
+                observe.return_value = observation
+                actual = run(["--jev-shadow", *summary])
+                observe.assert_called_with(summary[1])
+                self.assertEqual(actual.pop("jev_shadow"), observation)
+                self.assertEqual(actual, baseline)
+            with patch.dict(os.environ, {"DELEGATION_JEV_SHADOW": "1"}):
+                self.assertIn("jev_shadow", run(summary))
+                observe.reset_mock()
+                self.assertEqual(run(["--no-jev-shadow", *summary]), baseline)
+                self.assertEqual(run([]), baseline)
+                observe.assert_not_called()
+
+    def test_jev_transport_and_local_credential(self) -> None:
+        from jev_shadow import observe_intent
+        home = Path(self.temp_dir.name)
+        env_file = home / ".config/cloud-ops/env/typesafe.env"
+        env_file.parent.mkdir(parents=True)
+        with patch("jev_shadow.Path.home", return_value=home), patch("jev_shadow.http.client.HTTPSConnection") as https:
+            self.assertEqual(observe_intent("batch")["reason"], "credential")
+            https.assert_not_called()
+            env_file.write_text('export TYPESAFE_API_KEY="fixture-only"\n')
+            self.assertEqual(observe_intent("a" * 501)["status"], "skipped")
+            https.assert_not_called()
+            conn = https.return_value
+            response = conn.getresponse.return_value
+            response.status = 200
+            response.read.return_value = b'{"answers":{"intent":{"type":"choice","choice":"batch"}}}'
+            self.assertEqual(observe_intent("redacted task"), {"status": "observed", "category": "batch"})
+            method, path, body, headers = conn.request.call_args.args
+            self.assertEqual((method, path), ("POST", "/v1/systemone"))
+            self.assertEqual(json.loads(body)["state"], "redacted task")
+            self.assertNotIn(b"fixture-only", body)
+            self.assertEqual(headers["Authorization"], "Bearer fixture-only")
+            for bad in (b"invalid", b'{"answers":{"intent":{"type":"choice","choice":"other"}}}'):
+                response.read.return_value = bad
+                self.assertEqual(observe_intent("a")["reason"], "invalid_response")
+            response.status = 429
+            self.assertEqual(observe_intent("a")["http_status"], 429)
+            conn.request.side_effect = TimeoutError()
+            self.assertEqual(observe_intent("a")["reason"], "network")
+            conn.close.assert_called()
 
     def test_explicit_provider_matches_runtime_evidence(self) -> None:
         home = self.catalog.parent

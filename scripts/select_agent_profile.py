@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -95,6 +96,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--codex-home", type=Path, default=default_codex_home())
     parser.add_argument("--native-binding", type=json.loads, action="append", default=[], help="Observed native binding JSON: agent_name, model, model_reasoning_effort, sandbox_mode, and model_provider when configured; repeat per role")
+    parser.add_argument("--jev-shadow", action=argparse.BooleanOptionalAction,
+                        default=os.environ.get("DELEGATION_JEV_SHADOW") == "1",
+                        help="Observe ambiguous intent with Jev; never affects dispatch")
+    parser.add_argument("--unclear-intent-summary", metavar="REDACTED_TEXT",
+                        help="Supply a short, de-identified summary only when task intent is unclear")
     return parser.parse_args()
 
 
@@ -481,7 +487,15 @@ def batch_rejection_reason(args: argparse.Namespace) -> str:
 
 
 def main() -> None:
-    print(json.dumps(select(parse_args()), ensure_ascii=False, indent=2))
+    args = parse_args()
+    observation = None
+    if args.jev_shadow and args.unclear_intent_summary is not None:
+        from jev_shadow import observe_intent
+        observation = observe_intent(args.unclear_intent_summary)
+    result = select(args)
+    if observation is not None:
+        result["jev_shadow"] = observation
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

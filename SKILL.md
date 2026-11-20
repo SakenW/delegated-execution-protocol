@@ -17,6 +17,8 @@ description: 当独立证据、可并行研究、有界实现或电脑操作委�
 
 仅对通过价值门的真实候选读取 [路由策略](references/routing-policy.md)，运行其中的 selector。遵守 `delegate=false`、`max_workers`、强制 transport 和拆分要求；字段由证据推断，不变成用户问卷。selector 先选择角色，再从实际 Agent 配置读取模型、effort 与权限；不排斥主会话或已配置角色使用其他 provider。使用 `auto` 时，原生绑定核验通过才走原生派发。缺少匹配证据时，需要中途接收指令的任务停止派发；可独立完成的电脑任务走显式 app-server，其余独立任务走显式 CLI。
 
+Jev 意图旁路默认关闭。开启后，仅当不清楚用户要求的是机械核对、按规则逐项分类还是审查判断时，给 selector 传一条已脱敏的任务摘要。先独立填写原有路由字段，再查看 Jev 分类与实际角色的差异。任务类型已清楚时直接走现有流程，即使实施细节仍有歧义。开关和摘要要求见[路由策略](references/routing-policy.md)。
+
 按既定规则逐项提取、分类或核对的低风险批量任务用 `delegated_batch_explorer`。范围明确、证据可核验的低中风险正确性审查用 `delegated_standard_reviewer`。高风险、跨模块或合同敏感的独立审查用 `delegated_reviewer`。普通探索用 `delegated_explorer`，多文件研究用 `delegated_researcher`，实现用 `delegated_worker`，高风险实现用 `delegated_senior_worker`，有界电脑操作用 `delegated_computer_worker`。不通过任务标签声称模型切换。普通派发读 [运行时方式](references/runtime-transports.md)；电脑任务走显式 app-server 时，使用[固定入口](references/computer-tasks.md)及其内置审批脚本。 selector 只给路由建议，不证明账户/provider 可用；正式派发前必须通过该 transport 的当前检查。普通 CLI 使用 `scripts/preflight_dispatch.py`，电脑入口直接核验运行绑定，原生核对实际子任务的模型、推理档位、权限及显式配置的 provider。失败回主线程，不自动替换角色、模型或 provider。
 
 ## 所有权与执行
